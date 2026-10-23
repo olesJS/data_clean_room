@@ -1,0 +1,17 @@
+# Python / FastAPI
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Node / React
+node_modules/
+build/
+dist/
+
+# Environment variables & Logs
+.env
+*.log
+
+# Docker & OS
+.DS_Store
