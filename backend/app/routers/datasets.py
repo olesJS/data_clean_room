@@ -143,11 +143,32 @@ async def upload_dataset(
             first_line = lines[0]
             sep = ";" if first_line.count(";") > first_line.count(",") else ","
 
+            id_keywords = (
+                "ipn",
+                "tax_id",
+                "edrpou",
+                "phone",
+                "іпн",
+                "едрпоу",
+                "єдрпоу",
+                "рнокпп",
+                "табель",
+            )
+            header_cols = [
+                c.strip().strip('"').strip("'") for c in first_line.split(sep)
+            ]
+            dtype_overrides = {
+                col: str
+                for col in header_cols
+                if any(k in col.lower() for k in id_keywords)
+            }
+
             try:
                 df = pd.read_csv(
                     io.BytesIO(content),
                     encoding=encoding_used,
                     sep=sep,
+                    dtype=dtype_overrides if dtype_overrides else None,
                 )
             except pd.errors.EmptyDataError:
                 raise ValueError("CSV file is empty or has no readable columns.")
@@ -157,8 +178,6 @@ async def upload_dataset(
             if len(df) == 0:
                 raise ValueError("CSV file contains header only with no data rows.")
 
-            # Preserve identifier columns (IPN, EDRPOU, phone) as string
-            id_keywords = ("ipn", "tax_id", "edrpou", "phone")
             for col in df.columns:
                 if any(k in str(col).lower() for k in id_keywords):
                     df[col] = df[col].astype(str)
