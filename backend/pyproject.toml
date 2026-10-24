@@ -17,6 +17,5 @@ addopts = "-ra -q"
 testpaths = ["tests"]
 pythonpath = ["."]
 filterwarnings = [
-    "ignore::starlette.exceptions.StarletteDeprecationWarning",
     "ignore::DeprecationWarning",
 ]
