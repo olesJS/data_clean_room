@@ -16,6 +16,3 @@ minversion = "6.0"
 addopts = "-ra -q"
 testpaths = ["tests"]
 pythonpath = ["."]
-filterwarnings = [
-    "ignore::DeprecationWarning",
-]

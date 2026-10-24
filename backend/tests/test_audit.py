@@ -74,7 +74,7 @@ def test_get_audit_as_data_steward(client):
     assert "result" in first
 
 
-def test_get_audit_forbidden_for_other_roles(client):
+def test_get_audit_forbidden_for_other_roles(client, db_session):
     # Login as DataProvider
     provider_res = client.post(
         "/api/auth/login",
@@ -89,8 +89,29 @@ def test_get_audit_forbidden_for_other_roles(client):
     assert response.status_code == 403
     assert "DataSteward" in response.json()["detail"]
 
+    forbidden_log = (
+        db_session.query(AuditLog)
+        .filter(
+            AuditLog.actor == "provider@example.com",
+            AuditLog.result == "FORBIDDEN",
+        )
+        .first()
+    )
+    assert forbidden_log is not None
+    assert forbidden_log.action == "ACCESS_DENIED"
 
-def test_get_audit_unauthenticated(client):
+
+def test_get_audit_unauthenticated(client, db_session):
     response = client.get("/audit")
     assert response.status_code == 401
     assert response.json() == {"detail": "Not authenticated"}
+
+    unauth_log = (
+        db_session.query(AuditLog)
+        .filter(
+            AuditLog.actor == "unauthenticated",
+            AuditLog.result == "UNAUTHORIZED",
+        )
+        .first()
+    )
+    assert unauth_log is not None

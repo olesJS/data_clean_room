@@ -114,6 +114,7 @@ def test_full_platform_scenario(client):
     actions = [log["action"] for log in audit_logs]
     assert "LOGIN" in actions
     assert "UPLOAD_DATASET" in actions
+    assert "ACCESS_DENIED" in actions
 
     # Check that failed upload was recorded
     corrupt_log = next(
@@ -131,3 +132,17 @@ def test_full_platform_scenario(client):
     assert success_log is not None
     assert success_log["result"] == "SUCCESS"
     assert success_log["actor"] == "provider@example.com"
+
+    # 12. Check GET /datasets permissions
+    # Unauthenticated gives 401
+    assert client.get("/datasets").status_code == 401
+
+    # Provider sees own datasets
+    prov_list = client.get(
+        "/datasets",
+        headers={"Authorization": f"Bearer {provider_token}"},
+    )
+    assert prov_list.status_code == 200
+    assert len(prov_list.json()) >= 2
+    for ds in prov_list.json():
+        assert ds["uploaded_by"] == "provider@example.com"

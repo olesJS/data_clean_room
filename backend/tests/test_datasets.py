@@ -177,7 +177,56 @@ def test_upload_malformed_csv(client, provider_token):
     assert "columns" in detail or "empty" in detail
 
 
-def test_list_datasets(client):
-    response = client.get("/datasets")
+def test_list_datasets(client, provider_token):
+    response = client.get(
+        "/datasets",
+        headers={"Authorization": f"Bearer {provider_token}"},
+    )
     assert response.status_code == 200
     assert isinstance(response.json(), list)
+
+
+def test_list_datasets_unauthenticated(client):
+    response = client.get("/datasets")
+    assert response.status_code == 401
+    assert response.json() == {"detail": "Not authenticated"}
+
+
+def test_upload_csv_cp1251_semicolon(client, provider_token):
+    # Testing UC-02 semicolon delimiter and CP1251 encoding
+    content_cp1251 = "ід;зарплата;статус\n101;25000;активний\n".encode("cp1251")
+    response = client.post(
+        "/datasets",
+        headers={"Authorization": f"Bearer {provider_token}"},
+        files={"file": ("payroll_cp1251.csv", io.BytesIO(content_cp1251), "text/csv")},
+    )
+    assert response.status_code == 201
+    data = response.json()
+    assert data["row_count"] == 1
+    assert "ід" in data["columns"]
+    assert "зарплата" in data["columns"]
+
+
+def test_upload_csv_header_only_rejected(client, provider_token):
+    header_only = b"user_id,name,role\n"
+    response = client.post(
+        "/datasets",
+        headers={"Authorization": f"Bearer {provider_token}"},
+        files={"file": ("header_only.csv", io.BytesIO(header_only), "text/csv")},
+    )
+    assert response.status_code == 400
+    assert "header only" in response.json()["detail"].lower()
+
+
+def test_upload_csv_preserves_ipn_as_string(client, provider_token):
+    # Ensure IPN with leading zero and empty value is preserved as string
+    csv_with_ipn = b"name,ipn_code\nPetro,0123456789\nIvan,\n"
+    response = client.post(
+        "/datasets",
+        headers={"Authorization": f"Bearer {provider_token}"},
+        files={"file": ("tax_report.csv", io.BytesIO(csv_with_ipn), "text/csv")},
+    )
+    assert response.status_code == 201
+    data = response.json()
+    assert "ipn_code" in data["columns"]
+    assert data["columns"]["ipn_code"] in ("object", "string", "str")

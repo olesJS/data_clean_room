@@ -23,7 +23,7 @@ class AuditLog(Base):
     __tablename__ = "audit_logs"
 
     id = Column(Integer, primary_key=True, index=True)
-    timestamp = Column(DateTime, default=datetime.utcnow, nullable=False)
+    timestamp = Column(DateTime, default=utc_now, nullable=False)
     actor = Column(String(255), nullable=False)
     action = Column(String(100), nullable=False)
     object = Column(String(255), nullable=False)

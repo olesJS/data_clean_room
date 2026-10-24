@@ -12,6 +12,17 @@ DATABASE_URL = os.getenv(
 if DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
 
+# Normalize postgresql:// to postgresql+psycopg2:// if psycopg3 is not present
+if DATABASE_URL.startswith("postgresql://") and not DATABASE_URL.startswith(
+    "postgresql+"
+):
+    try:
+        import psycopg  # noqa: F401
+    except ImportError:
+        DATABASE_URL = DATABASE_URL.replace(
+            "postgresql://", "postgresql+psycopg2://", 1
+        )
+
 connect_args = {}
 if DATABASE_URL.startswith("sqlite"):
     connect_args["check_same_thread"] = False
@@ -30,11 +41,22 @@ def get_db():
 
 
 def init_db():
-    """Create all tables and seed initial users if necessary."""
+    """Create all tables and seed initial users if in development/test."""
     from app import models
     from app.auth import hash_password
 
     Base.metadata.create_all(bind=engine)
+
+    env = os.getenv("ENV", "development").lower()
+    seed_env = os.getenv("SEED_USERS")
+    should_seed = (
+        seed_env.lower() in ("true", "1", "yes")
+        if seed_env is not None
+        else (env in ("development", "test", "dev"))
+    )
+
+    if not should_seed:
+        return
 
     db = SessionLocal()
     try:

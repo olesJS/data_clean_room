@@ -5,16 +5,28 @@ from typing import Optional
 
 import bcrypt
 import jwt
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
+from app.audit import log_event
 from app.database import get_db
 from app.models import User
 
-DEFAULT_SECRET = "default_secret_key_data_clean_room_super_secure_32_bytes_token!"
-RAW_SECRET_KEY = os.getenv("SECRET_KEY", DEFAULT_SECRET)
+ENV = os.getenv("ENV", "development").lower()
+RAW_SECRET_KEY = os.getenv("SECRET_KEY")
+
+if not RAW_SECRET_KEY:
+    if ENV in ("development", "test", "dev"):
+        RAW_SECRET_KEY = "dev_secret_key_data_clean_room_super_secure_32_bytes_token!"
+    else:
+        err = "CRITICAL CONFIG ERROR: SECRET_KEY environment variable must be set!"
+        raise RuntimeError(err)
+
 if len(RAW_SECRET_KEY.encode("utf-8")) < 32:
+    if ENV not in ("development", "test", "dev"):
+        err = "CRITICAL CONFIG ERROR: SECRET_KEY must be >= 32 bytes in production!"
+        raise RuntimeError(err)
     SECRET_KEY = hashlib.sha256(RAW_SECRET_KEY.encode("utf-8")).hexdigest()
 else:
     SECRET_KEY = RAW_SECRET_KEY
@@ -53,10 +65,19 @@ def decode_access_token(token: str) -> dict:
 
 
 def get_current_user(
+    request: Request,
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(security_bearer),
     db: Session = Depends(get_db),
 ) -> User:
+    endpoint_path = request.url.path
     if not credentials or not credentials.credentials:
+        log_event(
+            actor="unauthenticated",
+            action="UNAUTHORIZED_ACCESS",
+            object=endpoint_path,
+            result="UNAUTHORIZED",
+            db=db,
+        )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Not authenticated",
@@ -68,12 +89,15 @@ def get_current_user(
         payload = decode_access_token(token)
         email: Optional[str] = payload.get("email") or payload.get("sub")
         if not email:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Not authenticated",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
+            raise ValueError("Token missing email")
     except Exception:
+        log_event(
+            actor="invalid_token",
+            action="UNAUTHORIZED_ACCESS",
+            object=endpoint_path,
+            result="UNAUTHORIZED",
+            db=db,
+        )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Not authenticated",
@@ -82,6 +106,13 @@ def get_current_user(
 
     user = db.query(User).filter(User.email == email).first()
     if not user:
+        log_event(
+            actor=email or "unknown_user",
+            action="UNAUTHORIZED_ACCESS",
+            object=endpoint_path,
+            result="UNAUTHORIZED",
+            db=db,
+        )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Not authenticated",
@@ -90,25 +121,20 @@ def get_current_user(
     return user
 
 
-def get_optional_current_user(
-    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security_bearer),
-    db: Session = Depends(get_db),
-) -> Optional[User]:
-    if not credentials or not credentials.credentials:
-        return None
-    try:
-        payload = decode_access_token(credentials.credentials)
-        email = payload.get("email") or payload.get("sub")
-        if not email:
-            return None
-        return db.query(User).filter(User.email == email).first()
-    except Exception:
-        return None
-
-
 def require_role(role_name: str):
-    def role_checker(current_user: User = Depends(get_current_user)) -> User:
+    def role_checker(
+        request: Request,
+        current_user: User = Depends(get_current_user),
+        db: Session = Depends(get_db),
+    ) -> User:
         if current_user.role != role_name:
+            log_event(
+                actor=current_user.email,
+                action="ACCESS_DENIED",
+                object=request.url.path,
+                result="FORBIDDEN",
+                db=db,
+            )
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"Access forbidden: {role_name} role required",
@@ -119,9 +145,20 @@ def require_role(role_name: str):
 
 
 def require_roles(allowed_roles: list[str] | tuple[str, ...]):
-    def role_checker(current_user: User = Depends(get_current_user)) -> User:
+    def role_checker(
+        request: Request,
+        current_user: User = Depends(get_current_user),
+        db: Session = Depends(get_db),
+    ) -> User:
         if current_user.role not in allowed_roles:
             roles_str = ", ".join(allowed_roles)
+            log_event(
+                actor=current_user.email,
+                action="ACCESS_DENIED",
+                object=request.url.path,
+                result="FORBIDDEN",
+                db=db,
+            )
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"Access forbidden: requires one of [{roles_str}] roles",
