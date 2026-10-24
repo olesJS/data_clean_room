@@ -1,10 +1,23 @@
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 
-from app.database import engine
+from app.database import engine, init_db
+from app.routers import audit, auth, datasets
 
-app = FastAPI(title="Data Clean Room API")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    try:
+        init_db()
+    except Exception as exc:
+        print(f"[STARTUP WARNING] Could not initialize database: {exc}")
+    yield
+
+
+app = FastAPI(title="Data Clean Room API", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -13,6 +26,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.include_router(auth.router)
+app.include_router(audit.router)
+app.include_router(datasets.router)
 
 
 @app.get("/")
