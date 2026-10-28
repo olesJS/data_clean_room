@@ -3,11 +3,17 @@ __pycache__/
 *.py[cod]
 .venv/
 venv/
+.pytest_cache/
+.ruff_cache/
 
 # Node / React
 node_modules/
 build/
 dist/
+
+# Storage and test artifacts
+storage/
+test_storage/
 
 # Environment variables & Logs
 .env
