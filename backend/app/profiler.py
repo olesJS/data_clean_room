@@ -7,14 +7,12 @@ and a quality score.
 
 from __future__ import annotations
 
-import os
 import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 import pandas as pd
-
 
 # ---------------------------------------------------------------------------
 # Dictionary loaders for high-precision PII detection
@@ -28,11 +26,13 @@ _SURNAMES: set[str] = set()
 _OBLASTS: set[str] = set()
 _ADDRESS_WORDS: set[str] = set()
 
+
 def _load_dictionaries():
     global _FIRST_NAMES, _SURNAMES, _OBLASTS, _ADDRESS_WORDS
     if _FIRST_NAMES:
         return
     try:
+
         def read_words(path: Path) -> set[str]:
             if not path.exists():
                 return set()
@@ -52,6 +52,7 @@ def _load_dictionaries():
     except Exception:
         pass
 
+
 _load_dictionaries()
 
 
@@ -59,9 +60,10 @@ _load_dictionaries()
 # Validation helpers (Luhn, Checksum, Mod97, UA Phone)
 # ---------------------------------------------------------------------------
 
+
 def _luhn_check(number: str) -> bool:
     """Return True if *number* is 16 digits and passes Luhn algorithm."""
-    clean = re.sub(r'[\s\-]', '', str(number))
+    clean = re.sub(r"[\s\-]", "", str(number))
     if len(clean) != 16 or not clean.isdigit():
         return False
     digits = [int(d) for d in clean]
@@ -84,14 +86,27 @@ def _ua_ipn_checksum(s: str) -> bool:
     if len(s) != 10 or not s.isdigit():
         return False
     d = [int(c) for c in s]
-    control = ((-1)*d[0] + 5*d[1] + 7*d[2] + 9*d[3] + 4*d[4] +
-               6*d[5] + 10*d[6] + 5*d[7] + 7*d[8]) % 11 % 10
+    control = (
+        (
+            (-1) * d[0]
+            + 5 * d[1]
+            + 7 * d[2]
+            + 9 * d[3]
+            + 4 * d[4]
+            + 6 * d[5]
+            + 10 * d[6]
+            + 5 * d[7]
+            + 7 * d[8]
+        )
+        % 11
+        % 10
+    )
     return control == d[9]
 
 
 def _iban_mod97(s: str) -> bool:
     """Validate UA IBAN with standard ISO 7064 mod 97 check."""
-    s = re.sub(r'\s+', '', str(s)).upper()
+    s = re.sub(r"\s+", "", str(s)).upper()
     if not (s.startswith("UA") and len(s) == 29 and s[2:].isdigit()):
         return False
     # Move 'UA' to end -> U=30, A=10 => '3010'
@@ -103,40 +118,76 @@ def _iban_mod97(s: str) -> bool:
 
 
 _UA_OPERATORS = (
-    '050', '063', '066', '067', '068', '073',
-    '089', '091', '092', '093', '094', '095', '096', '097', '098', '099'
+    "050",
+    "063",
+    "066",
+    "067",
+    "068",
+    "073",
+    "089",
+    "091",
+    "092",
+    "093",
+    "094",
+    "095",
+    "096",
+    "097",
+    "098",
+    "099",
 )
+
 
 def _is_ua_phone(s: str) -> bool:
     """Strict Ukrainian mobile phone validation."""
-    digits = re.sub(r'\D', '', str(s))
-    if len(digits) == 12 and digits.startswith('380'):
+    digits = re.sub(r"\D", "", str(s))
+    if len(digits) == 12 and digits.startswith("380"):
         digits = digits[2:]
     return len(digits) == 10 and digits.startswith(_UA_OPERATORS)
 
 
 # Regex patterns using Unicode escapes to prevent Windows cp1252 corruption
-_RE_EMAIL = re.compile(r'^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$')
+_RE_EMAIL = re.compile(r"^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$")
 # Ukrainian Cyrillic uppercase: [\u0410-\u042f\u0490\u0404\u0406\u0407]
-_RE_PASSPORT_BOOK = re.compile(r'^[\u0410-\u042f\u0490\u0404\u0406\u0407]{2}\s?\d{6}$')
-_RE_PASSPORT_ID = re.compile(r'^\d{9}$')
-_RE_NAME_INITIALS = re.compile(r'^[\u0410-\u042f\u0490\u0404\u0406\u0407][\u0430-\u044f\u0491\u0454\u0456\u0457\']+\s+[\u0410-\u042f\u0490\u0404\u0406\u0407]\.\s?[\u0410-\u042f\u0490\u0404\u0406\u0407]\.$')
+_RE_PASSPORT_BOOK = re.compile(r"^[\u0410-\u042f\u0490\u0404\u0406\u0407]{2}\s?\d{6}$")
+_RE_PASSPORT_ID = re.compile(r"^\d{9}$")
+_RE_NAME_INITIALS = re.compile(
+    r"^[\u0410-\u042f\u0490\u0404\u0406\u0407][\u0430-\u044f\u0491\u0454\u0456\u0457\']+\s+[\u0410-\u042f\u0490\u0404\u0406\u0407]\.\s?[\u0410-\u042f\u0490\u0404\u0406\u0407]\.$"
+)
 
 _NAME_KEYWORDS = [
-    'name', 'fname', 'lname', 'surname', 'first_name', 'last_name',
-    'patronymic', 'full_name', '\u0456\u043c\'\u044f', '\u0456\u043c\u044f',
-    '\u043f\u0440\u0456\u0437\u0432\u0438\u0449\u0435'
+    "name",
+    "fname",
+    "lname",
+    "surname",
+    "first_name",
+    "last_name",
+    "patronymic",
+    "full_name",
+    "\u0456\u043c'\u044f",
+    "\u0456\u043c\u044f",
+    "\u043f\u0440\u0456\u0437\u0432\u0438\u0449\u0435",
 ]
 
 _NON_NAME_COLUMNS = {
-    'brand_name', 'product_line', 'city_name', 'company_name', 'position', 'department',
-    'order_number', 'invoice_no', 'transaction_id', 'contract_ref', 'part_number', 'order_id'
+    "brand_name",
+    "product_line",
+    "city_name",
+    "company_name",
+    "position",
+    "department",
+    "order_number",
+    "invoice_no",
+    "transaction_id",
+    "contract_ref",
+    "part_number",
+    "order_id",
 }
 
 
 # ---------------------------------------------------------------------------
 # Masking sample helper for UI (PiiPage)
 # ---------------------------------------------------------------------------
+
 
 def mask_sample(val: Any, pii_type: str | None) -> str:
     """Create a masked preview string for UI."""
@@ -158,7 +209,7 @@ def mask_sample(val: Any, pii_type: str | None) -> str:
     elif pii_type in ("phone", "UA_PHONE"):
         return s[:7] + " ***-**-" + s[-2:] if len(s) >= 10 else s[:4] + "***"
     elif pii_type in ("card", "CREDIT_CARD"):
-        clean = re.sub(r'[\s\-]', '', s)
+        clean = re.sub(r"[\s\-]", "", s)
         return clean[:4] + " **** **** " + clean[-4:] if len(clean) >= 12 else "****"
     elif pii_type in ("passport", "UA_PASSPORT"):
         return s[:2] + " ****" + s[-2:] if len(s) >= 6 else s[:2] + "****"
@@ -175,6 +226,7 @@ def mask_sample(val: Any, pii_type: str | None) -> str:
 # ---------------------------------------------------------------------------
 # PII Detection Core
 # ---------------------------------------------------------------------------
+
 
 def detect_pii(series: pd.Series, col_name: str) -> dict:
     """Detect PII type and confidence in a Series.
@@ -293,9 +345,23 @@ def detect_pii(series: pd.Series, col_name: str) -> dict:
         }
 
     # 7. ADDRESS
-    addr_kw = ["\u043c.", "\u0432\u0443\u043b\u0438\u0446\u044f", "\u0432\u0443\u043b.", "\u043f\u0440\u043e\u0432.", "\u0431\u0443\u043b\u044c\u0432.", "\u043a\u0432.", "\u043e\u0431\u043b\u0430\u0441\u0442\u044c", "\u043f\u0440\u043e\u0441\u043f\u0435\u043a\u0442", "\u043f\u0440\u043e\u0441\u043f."]
-    addr_matches = str_sample.apply(lambda v: sum(kw in v.lower() for kw in addr_kw) >= 2)
-    if addr_matches.sum() / n >= 0.50 or ("address" in col_lower and addr_matches.sum() / n >= 0.20):
+    addr_kw = [
+        "\u043c.",
+        "\u0432\u0443\u043b\u0438\u0446\u044f",
+        "\u0432\u0443\u043b.",
+        "\u043f\u0440\u043e\u0432.",
+        "\u0431\u0443\u043b\u044c\u0432.",
+        "\u043a\u0432.",
+        "\u043e\u0431\u043b\u0430\u0441\u0442\u044c",
+        "\u043f\u0440\u043e\u0441\u043f\u0435\u043a\u0442",
+        "\u043f\u0440\u043e\u0441\u043f.",
+    ]
+    addr_matches = str_sample.apply(
+        lambda v: sum(kw in v.lower() for kw in addr_kw) >= 2
+    )
+    if addr_matches.sum() / n >= 0.50 or (
+        "address" in col_lower and addr_matches.sum() / n >= 0.20
+    ):
         return {
             "is_pii": True,
             "pii_type": "address",
@@ -318,10 +384,26 @@ def detect_pii(series: pd.Series, col_name: str) -> dict:
         }
 
     def is_name_words(val: str) -> bool:
-        words = [w.lower() for w in re.findall(r'[\u0410-\u044f\u0490\u0491\u0404\u0454\u0406\u0456\u0407\u0457\']+', val)]
+        words = [
+            w.lower()
+            for w in re.findall(
+                r"[\u0410-\u044f\u0490\u0491\u0404\u0454\u0406\u0456\u0407\u0457\']+",
+                val,
+            )
+        ]
         if not words:
             return False
-        has_patronymic = any(w.endswith(("\u043e\u0432\u0438\u0447", "\u0435\u0432\u0438\u0447", "\u0456\u0432\u043d\u0430", "\u0457\u0432\u043d\u0430")) for w in words)
+        has_patronymic = any(
+            w.endswith(
+                (
+                    "\u043e\u0432\u0438\u0447",
+                    "\u0435\u0432\u0438\u0447",
+                    "\u0456\u0432\u043d\u0430",
+                    "\u0457\u0432\u043d\u0430",
+                )
+            )
+            for w in words
+        )
         in_dict = any(w in _FIRST_NAMES or w in _SURNAMES for w in words)
         return has_patronymic or in_dict
 
@@ -359,6 +441,7 @@ def detect_pii(series: pd.Series, col_name: str) -> dict:
 # Column type classification
 # ---------------------------------------------------------------------------
 
+
 def _classify_col_type(series: pd.Series) -> str:
     """Return one of: 'numeric', 'datetime', 'boolean', 'string'."""
     if pd.api.types.is_bool_dtype(series):
@@ -373,7 +456,9 @@ def _classify_col_type(series: pd.Series) -> str:
         try:
             # Only test on ISO format or date format strings (YYYY-MM-DD or DD.MM.YYYY)
             sample_val = non_null.iloc[0]
-            if re.match(r'^\d{4}[-/]\d{2}[-/]\d{2}', sample_val) or re.match(r'^\d{2}\.\d{2}\.\d{4}', sample_val):
+            if re.match(r"^\d{4}[-/]\d{2}[-/]\d{2}", sample_val) or re.match(
+                r"^\d{2}\.\d{2}\.\d{4}", sample_val
+            ):
                 parsed = pd.to_datetime(non_null.head(50), errors="coerce")
                 if parsed.notna().sum() / len(parsed) >= 0.8:
                     return "datetime"
@@ -385,6 +470,7 @@ def _classify_col_type(series: pd.Series) -> str:
 # ---------------------------------------------------------------------------
 # Outlier detection
 # ---------------------------------------------------------------------------
+
 
 def _count_outliers_numeric(series: pd.Series) -> int:
     clean = series.dropna()
@@ -404,8 +490,8 @@ def _count_outliers_datetime(series: pd.Series) -> int:
     try:
         if not pd.api.types.is_datetime64_any_dtype(clean):
             clean = pd.to_datetime(clean, errors="coerce").dropna()
-        if hasattr(clean, 'dt') and clean.dt.tz is None:
-            clean = clean.dt.tz_localize('UTC')
+        if hasattr(clean, "dt") and clean.dt.tz is None:
+            clean = clean.dt.tz_localize("UTC")
         return int((clean > pd.Timestamp(now)).sum())
     except Exception:
         return 0
@@ -414,6 +500,7 @@ def _count_outliers_datetime(series: pd.Series) -> int:
 # ---------------------------------------------------------------------------
 # Histograms
 # ---------------------------------------------------------------------------
+
 
 def _build_histogram(series: pd.Series) -> dict | None:
     clean = series.dropna()
@@ -435,9 +522,10 @@ def _safe_scalar(val: Any) -> Any:
         return None
     try:
         import numpy as np  # noqa: F401
+
         if isinstance(val, (float,)) and (val != val):
             return None
-        if hasattr(val, 'item'):
+        if hasattr(val, "item"):
             return val.item()
     except ImportError:
         pass
@@ -449,6 +537,7 @@ def _safe_scalar(val: Any) -> Any:
 # ---------------------------------------------------------------------------
 # Main profiling entry point
 # ---------------------------------------------------------------------------
+
 
 def profile_dataframe(df: pd.DataFrame, dataset_id: int, dataset_name: str) -> dict:
     """Analyse *df* and return the canonical profile dict."""
@@ -490,32 +579,36 @@ def profile_dataframe(df: pd.DataFrame, dataset_id: int, dataset_name: str) -> d
             col_max = str(clean.max()) if len(clean) else None
             outliers_count = _count_outliers_datetime(parsed)
 
-        columns_profile.append({
-            "name": str(col),
-            "type": col_type,
-            "null_count": null_count,
-            "null_percentage": null_pct,
-            "unique_count": unique_count,
-            "is_pii": pii_info["is_pii"],
-            "pii_type": pii_info["pii_type"],
-            "pii_confidence": pii_info["pii_confidence"],
-            "min": col_min,
-            "max": col_max,
-            "mean": col_mean,
-            "outliers_count": outliers_count,
-            "histogram": histogram,
-        })
+        columns_profile.append(
+            {
+                "name": str(col),
+                "type": col_type,
+                "null_count": null_count,
+                "null_percentage": null_pct,
+                "unique_count": unique_count,
+                "is_pii": pii_info["is_pii"],
+                "pii_type": pii_info["pii_type"],
+                "pii_confidence": pii_info["pii_confidence"],
+                "min": col_min,
+                "max": col_max,
+                "mean": col_mean,
+                "outliers_count": outliers_count,
+                "histogram": histogram,
+            }
+        )
 
         if pii_info["is_pii"]:
-            pii_findings.append({
-                "column_name": str(col),
-                "pii_type": pii_info["pii_type"],
-                "confidence": pii_info["pii_confidence"],
-                "sample_masked": pii_info["sample_masked"],
-                "detection_method": pii_info["detection_method"],
-                "user_confirmed": None,
-                "corrected_pii_type": None,
-            })
+            pii_findings.append(
+                {
+                    "column_name": str(col),
+                    "pii_type": pii_info["pii_type"],
+                    "confidence": pii_info["pii_confidence"],
+                    "sample_masked": pii_info["sample_masked"],
+                    "detection_method": pii_info["detection_method"],
+                    "user_confirmed": None,
+                    "corrected_pii_type": None,
+                }
+            )
 
     # Data class assignment
     pii_types_found = {
@@ -538,7 +631,9 @@ def profile_dataframe(df: pd.DataFrame, dataset_id: int, dataset_name: str) -> d
     else:
         rows_with_null = int(df.isnull().any(axis=1).sum())
         violated_rows = rows_with_null + duplicate_rows_count
-        quality_score = max(0.0, round(100 * (total_rows - violated_rows) / total_rows, 1))
+        quality_score = max(
+            0.0, round(100 * (total_rows - violated_rows) / total_rows, 1)
+        )
 
     rules_violated_count = sum(1 for cp in columns_profile if cp["null_count"] > 0)
 

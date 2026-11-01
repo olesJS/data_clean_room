@@ -49,7 +49,7 @@ MAX_FILE_SIZE = int(os.getenv("MAX_FILE_SIZE", 50 * 1024 * 1024))  # 50MB defaul
 async def upload_dataset(
     file: UploadFile = File(...),
     name: Optional[str] = Form(None),
-    current_user: User = Depends(require_roles(["DataProvider"])),
+    current_user: User = Depends(require_roles(["DataProvider", "DataSteward"])),
     db: Session = Depends(get_db),
 ):
     actor = current_user.email
@@ -156,11 +156,11 @@ async def upload_dataset(
                 "tax_id",
                 "edrpou",
                 "phone",
-                "Ñ–Ð¿Ð½",
-                "ÐµÐ´Ñ€Ð¿Ð¾Ñƒ",
-                "Ñ”Ð´Ñ€Ð¿Ð¾Ñƒ",
-                "Ñ€Ð½Ð¾ÐºÐ¿Ð¿",
-                "Ñ‚Ð°Ð±ÐµÐ»ÑŒ",
+                "іпн",
+                "едрпоу",
+                "єдрпоу",
+                "рнокпп",
+                "табель",
             )
             header_cols = [
                 c.strip().strip('"').strip("'") for c in first_line.split(sep)
@@ -537,7 +537,7 @@ def update_pii_column(
 @router.delete("/api/datasets/{dataset_id}", status_code=204)
 def delete_dataset(
     dataset_id: int,
-    current_user: User = Depends(require_roles(["DataProvider"])),
+    current_user: User = Depends(require_roles(["DataProvider", "DataSteward"])),
     db: Session = Depends(get_db),
 ):
     """Delete a dataset owned by the current DataProvider.
@@ -555,7 +555,7 @@ def delete_dataset(
             detail="Dataset not found or you do not have permission to delete it.",
         )
 
-    # Remove the stored file from disk (best-effort — don't block deletion if file is missing)
+    # Remove stored file (best-effort — don't block deletion if missing)
     file_path = dataset.file_path
     if file_path and os.path.exists(file_path):
         try:
