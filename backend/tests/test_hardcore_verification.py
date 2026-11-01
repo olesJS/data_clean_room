@@ -67,8 +67,8 @@ def test_hardcore_rbac_matrix_complete(
             "/datasets",
             "POST",
             {"Authorization": f"Bearer {steward_token}"},
-            201,
-            "Steward -> POST /datasets (201)",
+            403,
+            "Steward -> POST /datasets (403)",
         ),
         # /audit GET (Audit logs)
         ("/audit", "GET", {}, 401, "Anon -> GET /audit (401)"),
