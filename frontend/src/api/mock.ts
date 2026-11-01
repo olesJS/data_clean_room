@@ -430,6 +430,6 @@ export async function mockPiiUpdate(
 }
 
 /** Заглушка DELETE /api/datasets/:id — видалення набору. */
-export async function mockDeleteDataset(_id: number | string): Promise<void> {
+export async function mockDeleteDataset(): Promise<void> {
   await delay(300)
 }

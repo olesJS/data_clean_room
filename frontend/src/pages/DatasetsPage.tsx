@@ -97,7 +97,7 @@ export default function DatasetsPage() {
         ),
       },
     ]
-  }, [rows])
+  }, [rows, deletingId])
 
   const loaded = rows !== null
   const empty = loaded && rows.length === 0

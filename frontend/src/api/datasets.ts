@@ -14,20 +14,20 @@ import type {
 /** GET /datasets. Мапимо бекенд-відповідь на інтерфейс фронтенду DatasetVersion */
 export async function fetchDatasets(): Promise<DatasetVersion[]> {
   if (config.useMock) return mockDatasets()
-  const rawList = await request<any[]>(endpoints.datasets)
+  const rawList = await request<Record<string, unknown>[]>(endpoints.datasets)
 
   return rawList.map((item) => ({
-    id: item.id,
-    dataset_id: item.id,
-    dataset_name: item.name,
-    file_name: item.original_filename || item.name,
-    format: (item.file_type || 'CSV').toUpperCase() as 'CSV' | 'JSON',
-    data_class: item.data_class || 'Internal',
-    status: item.status || 'Uploaded',
-    quality_score: item.quality_score ?? null,
+    id: Number(item.id),
+    dataset_id: Number(item.id),
+    dataset_name: item.name as string,
+    file_name: (item.original_filename as string) || (item.name as string),
+    format: ((item.file_type as string) || 'CSV').toUpperCase() as 'CSV' | 'JSON',
+    data_class: ((item.data_class as string) || 'Internal') as DatasetVersion['data_class'],
+    status: ((item.status as string) || 'Uploaded') as DatasetVersion['data_class'],
+    quality_score: (item.quality_score as number | null) ?? null,
     version_number: 1,
     parent_version_id: null,
-    updated_at: item.created_at || new Date().toISOString(),
+    updated_at: (item.created_at as string) || new Date().toISOString(),
   }))
 }
 
