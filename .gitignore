@@ -15,6 +15,9 @@ dist/
 storage/
 test_storage/
 
+# Databases
+*.db
+
 # Environment variables & Logs
 .env
 *.log
