@@ -527,3 +527,51 @@ def update_pii_column(
     )
 
     return finding
+
+
+# ---------------------------------------------------------------------------
+# DELETE /api/datasets/{id} — видалити набір даних (тільки власник-DataProvider)
+# ---------------------------------------------------------------------------
+
+@router.delete("/datasets/{dataset_id}", status_code=204)
+@router.delete("/api/datasets/{dataset_id}", status_code=204)
+def delete_dataset(
+    dataset_id: int,
+    current_user: User = Depends(require_roles(["DataProvider"])),
+    db: Session = Depends(get_db),
+):
+    """Delete a dataset owned by the current DataProvider.
+    Removes the file from disk and the row from the database.
+    """
+    dataset = (
+        db.query(Dataset)
+        .filter(Dataset.id == dataset_id, Dataset.uploaded_by == current_user.email)
+        .first()
+    )
+
+    if not dataset:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Dataset not found or you do not have permission to delete it.",
+        )
+
+    # Remove the stored file from disk (best-effort — don't block deletion if file is missing)
+    file_path = dataset.file_path
+    if file_path and os.path.exists(file_path):
+        try:
+            os.remove(file_path)
+        except OSError as exc:
+            print(f"[WARN] Could not remove file {file_path}: {exc}")
+
+    dataset_name = dataset.name
+
+    db.delete(dataset)
+    db.commit()
+
+    log_event(
+        actor=current_user.email,
+        action="DELETE_DATASET",
+        object=f"dataset:{dataset_id}:{dataset_name}",
+        result="SUCCESS",
+        db=db,
+    )

@@ -1,6 +1,6 @@
 import { config, endpoints } from '../config'
 import { ApiError, NETWORK_ERROR, extractError, notifyUnauthorized, request } from './client'
-import { mockDatasetProfile, mockDatasets, mockPiiScan, mockPiiUpdate, mockUpload } from './mock'
+import { mockDatasetProfile, mockDatasets, mockDeleteDataset, mockPiiScan, mockPiiUpdate, mockUpload } from './mock'
 import { storage } from '../auth/storage'
 import type {
   DatasetProfileResponse,
@@ -54,6 +54,12 @@ export function updatePiiColumn(
     method: 'PATCH',
     body: payload,
   })
+}
+
+/** DELETE /api/datasets/:id — видалити набір даних. */
+export async function deleteDataset(id: number | string): Promise<void> {
+  if (config.useMock) return mockDeleteDataset(id)
+  return request<void>(endpoints.datasetDelete(id), { method: 'DELETE' })
 }
 
 interface UploadParams {

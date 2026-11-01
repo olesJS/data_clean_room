@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { fetchDatasets } from '../api/datasets'
+import { deleteDataset, fetchDatasets } from '../api/datasets'
 import type { DatasetVersion } from '../api/types'
 import { ClassBadge, StatusBadge } from '../components/Badges'
 import { ErrorMessage } from '../components/ErrorMessage'
@@ -12,6 +12,8 @@ const formatDate = (iso: string) => new Date(iso).toLocaleDateString('uk-UA')
 export default function DatasetsPage() {
   const [rows, setRows] = useState<DatasetVersion[] | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [deletingId, setDeletingId] = useState<number | null>(null)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -20,6 +22,22 @@ export default function DatasetsPage() {
       .catch((err: unknown) => { if (!cancelled) setError(err instanceof Error ? err.message : 'Не вдалося завантажити набори') })
     return () => { cancelled = true }
   }, [])
+
+  async function handleDelete(id: number, name: string) {
+    if (!window.confirm(`Ви дійсно бажаєте видалити набір даних "${name}"?`)) {
+      return
+    }
+    setDeletingId(id)
+    setDeleteError(null)
+    try {
+      await deleteDataset(id)
+      setRows((prev) => (prev ? prev.filter((r) => r.dataset_id !== id) : prev))
+    } catch (err: unknown) {
+      setDeleteError(err instanceof Error ? err.message : 'Не вдалося видалити набір даних')
+    } finally {
+      setDeletingId(null)
+    }
+  }
 
   const stats = useMemo(() => {
     const list = rows ?? []
@@ -62,9 +80,20 @@ export default function DatasetsPage() {
         key: 'actions',
         header: 'Дії',
         render: (r) => (
-          <Link to={`/datasets/${r.dataset_id}`} className="btn btn--secondary btn--sm">
-            Профіль
-          </Link>
+          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+            <Link to={`/datasets/${r.dataset_id}`} className="btn btn--secondary btn--sm">
+              Профіль
+            </Link>
+            <button
+              type="button"
+              className="btn btn--danger btn--sm"
+              disabled={deletingId === r.dataset_id}
+              onClick={() => handleDelete(r.dataset_id, r.file_name)}
+              title="Видалити набір даних"
+            >
+              {deletingId === r.dataset_id ? 'Видалення…' : 'Видалити'}
+            </button>
+          </div>
         ),
       },
     ]
@@ -90,6 +119,7 @@ export default function DatasetsPage() {
       </div>
 
       {error && <ErrorMessage title="Не вдалося завантажити список">{error}</ErrorMessage>}
+      {deleteError && <ErrorMessage title="Помилка видалення">{deleteError}</ErrorMessage>}
       {!error && !loaded && <p className="subtitle">Завантаження…</p>}
       {empty && (
         <div className="empty">

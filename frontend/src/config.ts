@@ -16,4 +16,5 @@ export const endpoints = {
   datasetProfile: (id: number | string) => `/api/datasets/${id}/profile`,
   datasetPii: (id: number | string) => `/api/datasets/${id}/pii`,
   datasetPiiColumn: (id: number | string, col: string) => `/api/datasets/${id}/pii/${col}`,
+  datasetDelete: (id: number | string) => `/api/datasets/${id}`,
 }
