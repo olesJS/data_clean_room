@@ -1,23 +1,30 @@
-from pathlib import Path
-
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
 
 from app.auth import hash_password
 from app.database import Base, get_async_db, get_db
 from app.main import app
 from app.models import AuditLog, Dataset, User
 
-DB_FILE = Path("test_legal_basis.db")
-SYNC_URL = f"sqlite:///{DB_FILE}"
-ASYNC_URL = f"sqlite+aiosqlite:///{DB_FILE}"
+SYNC_URL = "sqlite:///file:test_legal_basis?mode=memory&cache=shared"
+ASYNC_URL = "sqlite+aiosqlite:///file:test_legal_basis?mode=memory&cache=shared"
+SQLITE_CONNECT_ARGS = {"check_same_thread": False, "uri": True}
 
-sync_engine = create_engine(SYNC_URL, connect_args={"check_same_thread": False})
+sync_engine = create_engine(
+    SYNC_URL,
+    connect_args=SQLITE_CONNECT_ARGS,
+    poolclass=StaticPool,
+)
 SyncSession = sessionmaker(autocommit=False, autoflush=False, bind=sync_engine)
 
-async_engine = create_async_engine(ASYNC_URL, connect_args={"check_same_thread": False})
+async_engine = create_async_engine(
+    ASYNC_URL,
+    connect_args=SQLITE_CONNECT_ARGS,
+    poolclass=StaticPool,
+)
 AsyncSessionMaker = async_sessionmaker(
     bind=async_engine,
     class_=AsyncSession,
@@ -45,11 +52,6 @@ def setup_teardown_db():
     yield
 
     Base.metadata.drop_all(bind=sync_engine)
-    if DB_FILE.exists():
-        try:
-            DB_FILE.unlink()
-        except Exception:
-            pass
 
 
 @pytest.fixture(autouse=True)
