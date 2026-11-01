@@ -23,7 +23,7 @@ export async function fetchDatasets(): Promise<DatasetVersion[]> {
     file_name: (item.original_filename as string) || (item.name as string),
     format: ((item.file_type as string) || 'CSV').toUpperCase() as 'CSV' | 'JSON',
     data_class: ((item.data_class as string) || 'Internal') as DatasetVersion['data_class'],
-    status: ((item.status as string) || 'Uploaded') as DatasetVersion['data_class'],
+    status: ((item.status as string) || 'Uploaded') as DatasetVersion['status'],
     quality_score: (item.quality_score as number | null) ?? null,
     version_number: 1,
     parent_version_id: null,
