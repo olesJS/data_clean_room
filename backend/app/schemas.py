@@ -44,7 +44,7 @@ class DatasetResponse(BaseModel):
     row_count: int
     uploaded_by: str
     created_at: datetime
-    # Sprint 2 — profiling fields (nullable until first profile run)
+    # Sprint 2 profiling fields
     data_class: Optional[str] = None
     quality_score: Optional[float] = None
 
@@ -92,6 +92,32 @@ class DatasetProfileResponse(BaseModel):
     columns: List[ColumnProfile]
 
 
+# PII finding schema for UI (SCRUM-33 / DCR-46)
+class PiiFinding(BaseModel):
+    column_name: str
+    pii_type: Optional[str] = None
+    confidence: float
+    sample_masked: Optional[str] = None
+    detection_method: str
+    user_confirmed: Optional[bool] = None
+    corrected_pii_type: Optional[str] = None
+
+
+class PiiUpdatePayload(BaseModel):
+    user_confirmed: bool
+    corrected_pii_type: Optional[str] = None
+
+
+class PiiScanResponse(BaseModel):
+    dataset_id: int
+    dataset_name: str
+    data_class: str
+    pii_columns_count: int
+    total_columns: int
+    findings: List[PiiFinding]
+
+
+# Backward compatible schema
 class DatasetPIIResponse(BaseModel):
     dataset_id: int
     data_class: str

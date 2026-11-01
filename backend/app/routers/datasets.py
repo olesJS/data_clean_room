@@ -21,7 +21,14 @@ from app.auth import get_current_user, require_roles
 from app.database import get_db
 from app.models import Dataset, User
 from app.profiler import profile_dataframe
-from app.schemas import DatasetProfileResponse, DatasetPIIResponse, DatasetResponse
+from app.schemas import (
+    DatasetProfileResponse,
+    DatasetPIIResponse,
+    DatasetResponse,
+    PiiFinding,
+    PiiScanResponse,
+    PiiUpdatePayload,
+)
 
 router = APIRouter(tags=["datasets"])
 
@@ -149,11 +156,11 @@ async def upload_dataset(
                 "tax_id",
                 "edrpou",
                 "phone",
-                "іпн",
-                "едрпоу",
-                "єдрпоу",
-                "рнокпп",
-                "табель",
+                "Ñ–Ð¿Ð½",
+                "ÐµÐ´Ñ€Ð¿Ð¾Ñƒ",
+                "Ñ”Ð´Ñ€Ð¿Ð¾Ñƒ",
+                "Ñ€Ð½Ð¾ÐºÐ¿Ð¿",
+                "Ñ‚Ð°Ð±ÐµÐ»ÑŒ",
             )
             header_cols = [
                 c.strip().strip('"').strip("'") for c in first_line.split(sep)
@@ -270,7 +277,7 @@ async def upload_dataset(
         dataset.profile_json = profile
         dataset.data_class = profile["data_class"]
         dataset.quality_score = profile["quality_score"]
-        dataset.pii_json = pii_cols
+        dataset.pii_json = profile.get("pii_findings", pii_cols)
         db.commit()
         db.refresh(dataset)
     except Exception as exc:
@@ -317,7 +324,7 @@ def list_datasets(
 
 
 # ---------------------------------------------------------------------------
-# Sprint 2 — Profile & PII endpoints
+# Sprint 2 â€” Profile & PII endpoints
 # ---------------------------------------------------------------------------
 
 def _load_df_for_dataset(dataset: Dataset) -> "pd.DataFrame":
@@ -377,7 +384,7 @@ def get_dataset_profile(
             dataset.profile_json = profile
             dataset.data_class = profile["data_class"]
             dataset.quality_score = profile["quality_score"]
-            dataset.pii_json = pii_cols
+            dataset.pii_json = profile.get("pii_findings", pii_cols)
             db.commit()
             db.refresh(dataset)
         except Exception as exc:
@@ -397,14 +404,14 @@ def get_dataset_profile(
     return dataset.profile_json
 
 
-@router.get("/datasets/{dataset_id}/pii", response_model=DatasetPIIResponse)
-@router.get("/api/datasets/{dataset_id}/pii", response_model=DatasetPIIResponse)
+@router.get("/datasets/{dataset_id}/pii", response_model=PiiScanResponse)
+@router.get("/api/datasets/{dataset_id}/pii", response_model=PiiScanResponse)
 def get_dataset_pii(
     dataset_id: int,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Return only PII findings for a dataset."""
+    """Return PII scan findings for a dataset in the format expected by UI."""
     if current_user.role == "DataProvider":
         dataset = (
             db.query(Dataset)
@@ -426,7 +433,7 @@ def get_dataset_pii(
             dataset.profile_json = profile
             dataset.data_class = profile["data_class"]
             dataset.quality_score = profile["quality_score"]
-            dataset.pii_json = pii_cols
+            dataset.pii_json = profile.get("pii_findings", pii_cols)
             db.commit()
             db.refresh(dataset)
         except Exception as exc:
@@ -443,9 +450,80 @@ def get_dataset_pii(
         db=db,
     )
 
-    pii_columns = dataset.pii_json or []
+    findings = dataset.pii_json or []
+    total_cols = len(dataset.columns) if isinstance(dataset.columns, (dict, list)) else len(findings)
+    pii_count = len([f for f in findings if f.get("pii_type") and f.get("user_confirmed") is not False])
+
     return {
-        "dataset_id": dataset_id,
+        "dataset_id": dataset.id,
+        "dataset_name": dataset.name,
         "data_class": dataset.data_class or "Internal",
-        "pii_columns": pii_columns,
+        "pii_columns_count": pii_count,
+        "total_columns": total_cols,
+        "findings": findings,
     }
+
+
+@router.patch("/datasets/{dataset_id}/pii/{column_name}", response_model=PiiFinding)
+@router.patch("/api/datasets/{dataset_id}/pii/{column_name}", response_model=PiiFinding)
+def update_pii_column(
+    dataset_id: int,
+    column_name: str,
+    payload: PiiUpdatePayload,
+    current_user: User = Depends(require_roles(["DataProvider", "DataSteward"])),
+    db: Session = Depends(get_db),
+):
+    """Confirm or correct a PII finding classification for a column."""
+    if current_user.role == "DataProvider":
+        dataset = (
+            db.query(Dataset)
+            .filter(Dataset.id == dataset_id, Dataset.uploaded_by == current_user.email)
+            .first()
+        )
+    else:
+        dataset = db.query(Dataset).filter(Dataset.id == dataset_id).first()
+
+    if not dataset:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Dataset not found.")
+
+    findings = list(dataset.pii_json or [])
+    found_idx = next((i for i, f in enumerate(findings) if f.get("column_name") == column_name), None)
+
+    if found_idx is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"PII finding for column '{column_name}' not found.")
+
+    finding = dict(findings[found_idx])
+    finding["user_confirmed"] = payload.user_confirmed
+    if payload.corrected_pii_type is not None:
+        finding["corrected_pii_type"] = payload.corrected_pii_type
+
+    findings[found_idx] = finding
+    dataset.pii_json = findings
+
+    active_types = {
+        f.get("corrected_pii_type") or f.get("pii_type")
+        for f in findings
+        if f.get("user_confirmed") is not False and (f.get("corrected_pii_type") or f.get("pii_type"))
+    }
+    personal_markers = {"ipn", "passport", "card", "UA_IPN", "UA_PASSPORT", "CREDIT_CARD"}
+    confidential_markers = {"iban", "email", "phone", "person_name", "address", "UA_IBAN", "UA_PHONE", "UA_FULL_NAME"}
+
+    if active_types & personal_markers:
+        dataset.data_class = "Personal"
+    elif active_types & confidential_markers:
+        dataset.data_class = "Confidential"
+    else:
+        dataset.data_class = "Internal"
+
+    db.commit()
+    db.refresh(dataset)
+
+    log_event(
+        actor=current_user.email,
+        action="UPDATE_PII_CLASSIFICATION",
+        object=f"dataset:{dataset_id}:column:{column_name}",
+        result="SUCCESS",
+        db=db,
+    )
+
+    return finding
