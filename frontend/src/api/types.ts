@@ -91,3 +91,45 @@ export interface DatasetProfileResponse {
   summary: DatasetProfileSummary
   columns: ColumnProfile[]
 }
+
+// ─── PII scan types ───────────────────────────────────────────────────────────
+
+export type PiiType =
+  | 'person_name'
+  | 'ipn'
+  | 'passport'
+  | 'iban'
+  | 'card'
+  | 'email'
+  | 'phone'
+  | 'address'
+  | 'birth_date'
+  | null
+
+/** Знахідка PII для однієї колонки набору даних. */
+export interface PiiFinding {
+  column_name: string
+  pii_type: PiiType
+  confidence: number
+  sample_masked: string | null
+  detection_method: string
+  /** null = очікує підтвердження, true = підтверджено, false = відхилено */
+  user_confirmed: boolean | null
+  corrected_pii_type?: PiiType
+}
+
+/** Тіло запиту PATCH /api/datasets/:id/pii/:column для підтвердження/виправлення. */
+export interface PiiUpdatePayload {
+  user_confirmed: boolean
+  corrected_pii_type?: PiiType
+}
+
+/** Відповідь GET /api/datasets/:id/pii */
+export interface PiiScanResponse {
+  dataset_id: number
+  dataset_name: string
+  data_class: DataClass
+  pii_columns_count: number
+  total_columns: number
+  findings: PiiFinding[]
+}

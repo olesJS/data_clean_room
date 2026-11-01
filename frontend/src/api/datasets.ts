@@ -1,8 +1,15 @@
 import { config, endpoints } from '../config'
 import { ApiError, NETWORK_ERROR, extractError, notifyUnauthorized, request } from './client'
-import { mockDatasetProfile, mockDatasets, mockUpload } from './mock'
+import { mockDatasetProfile, mockDatasets, mockPiiScan, mockPiiUpdate, mockUpload } from './mock'
 import { storage } from '../auth/storage'
-import type { DatasetProfileResponse, DatasetVersion, UploadResult } from './types'
+import type {
+  DatasetProfileResponse,
+  DatasetVersion,
+  PiiFinding,
+  PiiScanResponse,
+  PiiUpdatePayload,
+  UploadResult,
+} from './types'
 
 /** GET /datasets. Мапимо бекенд-відповідь на інтерфейс фронтенду DatasetVersion */
 export async function fetchDatasets(): Promise<DatasetVersion[]> {
@@ -28,6 +35,25 @@ export async function fetchDatasets(): Promise<DatasetVersion[]> {
 export function fetchDatasetProfile(id: number | string): Promise<DatasetProfileResponse> {
   if (config.useMock) return mockDatasetProfile(id)
   return request<DatasetProfileResponse>(endpoints.datasetProfile(id))
+}
+
+/** GET /api/datasets/:id/pii — результати PII-сканування. */
+export function fetchPiiScan(id: number | string): Promise<PiiScanResponse> {
+  if (config.useMock) return mockPiiScan(id)
+  return request<PiiScanResponse>(endpoints.datasetPii(id))
+}
+
+/** PATCH /api/datasets/:id/pii/:col — підтвердити або виправити PII-класифікацію колонки. */
+export function updatePiiColumn(
+  id: number | string,
+  columnName: string,
+  payload: PiiUpdatePayload
+): Promise<PiiFinding> {
+  if (config.useMock) return mockPiiUpdate(id, columnName, payload)
+  return request<PiiFinding>(endpoints.datasetPiiColumn(id, columnName), {
+    method: 'PATCH',
+    body: payload,
+  })
 }
 
 interface UploadParams {

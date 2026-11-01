@@ -1,5 +1,16 @@
 import { ApiError } from './client'
-import type { DatasetProfileResponse, DatasetVersion, LoginResponse, Role, UploadResult, User } from './types'
+import type {
+  DatasetProfileResponse,
+  DatasetVersion,
+  LoginResponse,
+  PiiFinding,
+  PiiScanResponse,
+  PiiType,
+  PiiUpdatePayload,
+  Role,
+  UploadResult,
+  User,
+} from './types'
 import { storage } from '../auth/storage'
 
 const delay = (ms: number) => new Promise((r) => setTimeout(r, ms))
@@ -297,4 +308,121 @@ export async function mockDatasetProfile(id: number | string): Promise<DatasetPr
   const numId = Number(id)
   if (numId === 103) return mockCustomersProfile
   return { ...mockPayrollProfile, dataset_id: Number.isFinite(numId) && numId > 0 ? numId : 1 }
+}
+
+// ─── PII scan mock data ───────────────────────────────────────────────────────
+
+const piiFindings: Record<number, PiiFinding[]> = {
+  101: [
+    {
+      column_name: 'ipn',
+      pii_type: 'ipn',
+      confidence: 0.98,
+      sample_masked: '12345*****',
+      detection_method: 'regex+checksum',
+      user_confirmed: null,
+    },
+    {
+      column_name: 'full_name',
+      pii_type: 'person_name',
+      confidence: 0.95,
+      sample_masked: 'Іван П***',
+      detection_method: 'dictionary',
+      user_confirmed: null,
+    },
+    {
+      column_name: 'iban',
+      pii_type: 'iban',
+      confidence: 0.99,
+      sample_masked: 'UA21 3220 ****',
+      detection_method: 'regex+checksum',
+      user_confirmed: null,
+    },
+  ],
+  103: [
+    {
+      column_name: 'full_name',
+      pii_type: 'person_name',
+      confidence: 0.94,
+      sample_masked: 'Марія К***',
+      detection_method: 'dictionary',
+      user_confirmed: null,
+    },
+    {
+      column_name: 'email',
+      pii_type: 'email',
+      confidence: 0.99,
+      sample_masked: 'm***@example.com',
+      detection_method: 'regex',
+      user_confirmed: null,
+    },
+    {
+      column_name: 'phone',
+      pii_type: 'phone',
+      confidence: 0.98,
+      sample_masked: '+380 67 ***-**-11',
+      detection_method: 'regex',
+      user_confirmed: null,
+    },
+    {
+      column_name: 'birth_date',
+      pii_type: 'birth_date',
+      confidence: 0.92,
+      sample_masked: '198*-**-**',
+      detection_method: 'column_name+regex',
+      user_confirmed: null,
+    },
+    {
+      column_name: 'ipn',
+      pii_type: 'ipn',
+      confidence: 0.96,
+      sample_masked: '98765*****',
+      detection_method: 'regex+checksum',
+      user_confirmed: null,
+    },
+  ],
+}
+
+export async function mockPiiScan(id: number | string): Promise<PiiScanResponse> {
+  await delay(350)
+  const numId = Number(id)
+  if (numId === 103) {
+    return {
+      dataset_id: 103,
+      dataset_name: 'customers.json',
+      data_class: 'Personal',
+      pii_columns_count: 5,
+      total_columns: 8,
+      findings: piiFindings[103].map((f) => ({ ...f })),
+    }
+  }
+  return {
+    dataset_id: numId > 0 ? numId : 1,
+    dataset_name: 'payroll.csv',
+    data_class: 'Personal',
+    pii_columns_count: 3,
+    total_columns: 6,
+    findings: piiFindings[101].map((f) => ({ ...f })),
+  }
+}
+
+export async function mockPiiUpdate(
+  _id: number | string,
+  columnName: string,
+  payload: PiiUpdatePayload
+): Promise<PiiFinding> {
+  await delay(300)
+  const numId = Number(_id)
+  const list = numId === 103 ? piiFindings[103] : piiFindings[101]
+  const idx = list.findIndex((f) => f.column_name === columnName)
+  if (idx === -1) throw new ApiError('Колонку не знайдено', 404)
+  list[idx] = {
+    ...list[idx],
+    user_confirmed: payload.user_confirmed,
+    corrected_pii_type: payload.corrected_pii_type ?? list[idx].corrected_pii_type,
+    pii_type: (payload.corrected_pii_type !== undefined
+      ? payload.corrected_pii_type
+      : list[idx].pii_type) as PiiType,
+  }
+  return { ...list[idx] }
 }
