@@ -20,7 +20,8 @@ from app.audit import log_event
 from app.auth import get_current_user, require_roles
 from app.database import get_db
 from app.models import Dataset, User
-from app.schemas import DatasetResponse
+from app.profiler import profile_dataframe
+from app.schemas import DatasetProfileResponse, DatasetPIIResponse, DatasetResponse
 
 router = APIRouter(tags=["datasets"])
 
@@ -41,7 +42,7 @@ MAX_FILE_SIZE = int(os.getenv("MAX_FILE_SIZE", 50 * 1024 * 1024))  # 50MB defaul
 async def upload_dataset(
     file: UploadFile = File(...),
     name: Optional[str] = Form(None),
-    current_user: User = Depends(require_roles(["DataProvider", "DataSteward"])),
+    current_user: User = Depends(require_roles(["DataProvider"])),
     db: Session = Depends(get_db),
 ):
     actor = current_user.email
@@ -262,6 +263,20 @@ async def upload_dataset(
     db.commit()
     db.refresh(dataset)
 
+    # 6b. Run profiling immediately after saving
+    try:
+        profile = profile_dataframe(df, dataset.id, dataset.name)
+        pii_cols = [c for c in profile["columns"] if c["is_pii"]]
+        dataset.profile_json = profile
+        dataset.data_class = profile["data_class"]
+        dataset.quality_score = profile["quality_score"]
+        dataset.pii_json = pii_cols
+        db.commit()
+        db.refresh(dataset)
+    except Exception as exc:
+        # Profiling failure must not block the upload response
+        print(f"[PROFILER WARNING] Could not profile dataset {dataset.id}: {exc}")
+
     # 7. Log successful upload in audit service
     log_event(
         actor=actor,
@@ -299,3 +314,138 @@ def list_datasets(
     )
 
     return datasets
+
+
+# ---------------------------------------------------------------------------
+# Sprint 2 — Profile & PII endpoints
+# ---------------------------------------------------------------------------
+
+def _load_df_for_dataset(dataset: Dataset) -> "pd.DataFrame":
+    """Re-read the stored file and return a DataFrame for re-profiling."""
+    import io
+    import json as _json
+
+    file_path = dataset.file_path
+    file_type = dataset.file_type.lower()
+
+    with open(file_path, "rb") as fh:
+        content = fh.read()
+
+    if file_type == "csv":
+        for enc in ("utf-8-sig", "utf-8", "cp1251", "latin1"):
+            try:
+                return pd.read_csv(io.BytesIO(content), encoding=enc)
+            except Exception:
+                continue
+        raise ValueError("Cannot decode CSV file.")
+    elif file_type == "json":
+        data = _json.loads(content.decode("utf-8"))
+        if isinstance(data, list):
+            return pd.DataFrame(data)
+        return pd.DataFrame(data)
+    else:
+        raise ValueError(f"Unsupported file type: {file_type}")
+
+
+@router.get("/datasets/{dataset_id}/profile", response_model=DatasetProfileResponse)
+@router.get("/api/datasets/{dataset_id}/profile", response_model=DatasetProfileResponse)
+def get_dataset_profile(
+    dataset_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Return the cached profile for a dataset (re-computes if missing)."""
+    # Fetch dataset with role-based visibility
+    if current_user.role == "DataProvider":
+        dataset = (
+            db.query(Dataset)
+            .filter(Dataset.id == dataset_id, Dataset.uploaded_by == current_user.email)
+            .first()
+        )
+    else:
+        dataset = db.query(Dataset).filter(Dataset.id == dataset_id).first()
+
+    if not dataset:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Dataset not found.")
+
+    # Re-profile if no cached result
+    if dataset.profile_json is None:
+        try:
+            df = _load_df_for_dataset(dataset)
+            profile = profile_dataframe(df, dataset.id, dataset.name)
+            pii_cols = [c for c in profile["columns"] if c["is_pii"]]
+            dataset.profile_json = profile
+            dataset.data_class = profile["data_class"]
+            dataset.quality_score = profile["quality_score"]
+            dataset.pii_json = pii_cols
+            db.commit()
+            db.refresh(dataset)
+        except Exception as exc:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Profiling failed: {exc}",
+            )
+
+    log_event(
+        actor=current_user.email,
+        action="VIEW_PROFILE",
+        object=f"dataset:{dataset_id}",
+        result="SUCCESS",
+        db=db,
+    )
+
+    return dataset.profile_json
+
+
+@router.get("/datasets/{dataset_id}/pii", response_model=DatasetPIIResponse)
+@router.get("/api/datasets/{dataset_id}/pii", response_model=DatasetPIIResponse)
+def get_dataset_pii(
+    dataset_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Return only PII findings for a dataset."""
+    if current_user.role == "DataProvider":
+        dataset = (
+            db.query(Dataset)
+            .filter(Dataset.id == dataset_id, Dataset.uploaded_by == current_user.email)
+            .first()
+        )
+    else:
+        dataset = db.query(Dataset).filter(Dataset.id == dataset_id).first()
+
+    if not dataset:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Dataset not found.")
+
+    # Ensure profile exists
+    if dataset.profile_json is None:
+        try:
+            df = _load_df_for_dataset(dataset)
+            profile = profile_dataframe(df, dataset.id, dataset.name)
+            pii_cols = [c for c in profile["columns"] if c["is_pii"]]
+            dataset.profile_json = profile
+            dataset.data_class = profile["data_class"]
+            dataset.quality_score = profile["quality_score"]
+            dataset.pii_json = pii_cols
+            db.commit()
+            db.refresh(dataset)
+        except Exception as exc:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Profiling failed: {exc}",
+            )
+
+    log_event(
+        actor=current_user.email,
+        action="VIEW_PII",
+        object=f"dataset:{dataset_id}",
+        result="SUCCESS",
+        db=db,
+    )
+
+    pii_columns = dataset.pii_json or []
+    return {
+        "dataset_id": dataset_id,
+        "data_class": dataset.data_class or "Internal",
+        "pii_columns": pii_columns,
+    }

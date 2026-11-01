@@ -40,12 +40,63 @@ def get_db():
         db.close()
 
 
+def _migrate_datasets_columns() -> None:
+    """Add Sprint-2 profiling columns to the datasets table if they are missing.
+
+    Uses raw SQL with dialect-aware ``IF NOT EXISTS`` (PostgreSQL) or a
+    ``has_column`` probe (other dialects) so it is safe to run on every
+    startup regardless of whether the columns already exist.
+    """
+    new_columns = [
+        ("data_class",    "VARCHAR(50)"),
+        ("quality_score", "DOUBLE PRECISION"),
+        ("profile_json",  "JSON"),
+        ("pii_json",      "JSON"),
+    ]
+
+    dialect = engine.dialect.name  # 'postgresql', 'sqlite', …
+
+    with engine.connect() as conn:
+        for col_name, col_type in new_columns:
+            try:
+                if dialect == "postgresql":
+                    stmt = (
+                        f"ALTER TABLE datasets "
+                        f"ADD COLUMN IF NOT EXISTS {col_name} {col_type};"
+                    )
+                    conn.execute(__import__("sqlalchemy").text(stmt))
+                else:
+                    # Generic fallback: probe with has_column
+                    inspector = __import__(
+                        "sqlalchemy", fromlist=["inspect"]
+                    ).inspect(engine)
+                    existing = [
+                        c["name"]
+                        for c in inspector.get_columns("datasets")
+                    ]
+                    if col_name not in existing:
+                        stmt = (
+                            f"ALTER TABLE datasets "
+                            f"ADD COLUMN {col_name} {col_type};"
+                        )
+                        conn.execute(__import__("sqlalchemy").text(stmt))
+            except Exception as exc:  # column already exists or other benign error
+                print(f"[DB MIGRATE] Skipping column '{col_name}': {exc}")
+        try:
+            conn.commit()
+        except Exception:
+            pass  # autocommit mode — commit is a no-op
+
+
 def init_db():
     """Create all tables and seed initial users if in development/test."""
     from app import models
     from app.auth import hash_password
 
     Base.metadata.create_all(bind=engine)
+
+    # Ensure Sprint-2 profiling columns exist in an already-created table
+    _migrate_datasets_columns()
 
     env = os.getenv("ENV", "development").lower()
     seed_env = os.getenv("SEED_USERS")

@@ -1,0 +1,45 @@
+/* Токени з Figma-файлу DCR (сторінка "Design Tokens & Components") */
+:root {
+  --color-primary: #0f172a;
+  --color-light: #f8fafc;
+  --color-neutral: #64748b;
+  --color-text-muted: #475569;
+  --color-success: #10b981;
+  --color-warning: #f59e0b;
+  --color-danger: #ef4444;
+  --color-info: #4055be;
+  --color-line: #e2e8f0;
+  --color-white: #ffffff;
+  --color-sidebar-active: #1e293b;
+  --color-sidebar-text: #cbd5e1;
+  --color-sidebar-muted: #94a3b8;
+
+  /* Тексти й тла для станів: контраст щонайменше 4,5:1 */
+  --success-bg: #d1fae5;  --success-text: #065f46;
+  --warning-bg: #fef3c7;  --warning-text: #92400e;
+  --danger-bg: #fee2e2;   --danger-text: #991b1b;  --danger-soft: #fef2f2;
+  --info-bg: #eef2ff;     --info-text: #3730a3;
+  --sky-bg: #e0f2fe;      --sky-text: #075985;
+
+  --font-family: 'Geologica', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --fw-regular: 400;
+  --fw-medium: 500;
+  --fw-semibold: 600;
+  --fw-bold: 700;
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 24px;
+
+  --sidebar-width: 240px;
+}

@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from sqlalchemy import JSON, Column, DateTime, Integer, String
+from sqlalchemy import JSON, Column, DateTime, Float, Integer, String
 
 from app.database import Base
 
@@ -43,3 +43,8 @@ class Dataset(Base):
     row_count = Column(Integer, nullable=False)
     uploaded_by = Column(String(255), nullable=False)
     created_at = Column(DateTime, default=utc_now, nullable=False)
+    # Sprint 2 — profiling fields
+    data_class = Column(String(50), nullable=True)      # Personal / Confidential / Internal / Public
+    quality_score = Column(Float, nullable=True)
+    profile_json = Column(JSON, nullable=True)           # cached full profile
+    pii_json = Column(JSON, nullable=True)               # PII findings
