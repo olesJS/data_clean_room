@@ -78,3 +78,30 @@ def client(monkeypatch):
     with TestClient(app) as test_client:
         yield test_client
     app.dependency_overrides.clear()
+
+
+@pytest.fixture
+def provider_token(client):
+    res = client.post(
+        "/api/auth/login",
+        json={"email": "provider@example.com", "password": "password123"},
+    )
+    return res.json()["access_token"]
+
+
+@pytest.fixture
+def consumer_token(client):
+    res = client.post(
+        "/api/auth/login",
+        json={"email": "consumer@example.com", "password": "password123"},
+    )
+    return res.json()["access_token"]
+
+
+@pytest.fixture
+def steward_token(client):
+    res = client.post(
+        "/api/auth/login",
+        json={"email": "steward@example.com", "password": "password123"},
+    )
+    return res.json()["access_token"]
