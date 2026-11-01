@@ -53,18 +53,18 @@ export interface UploadResult {
   [key: string]: unknown
 }
 
-// ---------------------------------------------------------------------------
-// Sprint 2 — Profiling & PII types
-// ---------------------------------------------------------------------------
+// ─── Profiling types (DCR-45) ─────────────────────────────────────────────────
 
 export interface ColumnHistogram {
   bins: string[]
   counts: number[]
 }
 
+export type ColumnDataType = 'string' | 'numeric' | 'datetime' | 'boolean'
+
 export interface ColumnProfile {
   name: string
-  type: 'string' | 'numeric' | 'datetime' | 'boolean'
+  type: ColumnDataType
   null_count: number
   null_percentage: number
   unique_count: number
@@ -94,8 +94,44 @@ export interface DatasetProfileResponse {
   columns: ColumnProfile[]
 }
 
-export interface DatasetPIIResponse {
+// ─── PII scan types (SCRUM-33) ────────────────────────────────────────────────
+
+export type PiiType =
+  | 'UA_IPN'
+  | 'UA_FULL_NAME'
+  | 'UA_IBAN'
+  | 'UA_PHONE'
+  | 'UA_PASSPORT'
+  | 'EMAIL'
+  | 'CREDIT_CARD'
+  | 'DATE_OF_BIRTH'
+  | 'UA_ADDRESS'
+  | null
+
+/** Знахідка PII для однієї колонки набору даних. */
+export interface PiiFinding {
+  column_name: string
+  pii_type: PiiType
+  confidence: number
+  sample_masked: string | null
+  detection_method: string
+  /** null = очікує підтвердження, true = підтверджено, false = відхилено */
+  user_confirmed: boolean | null
+  corrected_pii_type?: PiiType
+}
+
+/** Тіло запиту PATCH /api/datasets/:id/pii/:column для підтвердження/виправлення. */
+export interface PiiUpdatePayload {
+  user_confirmed: boolean
+  corrected_pii_type?: PiiType
+}
+
+/** Відповідь GET /api/datasets/:id/pii */
+export interface PiiScanResponse {
   dataset_id: number
+  dataset_name: string
   data_class: DataClass
-  pii_columns: ColumnProfile[]
+  pii_columns_count: number
+  total_columns: number
+  findings: PiiFinding[]
 }

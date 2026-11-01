@@ -34,7 +34,15 @@ export default function DatasetsPage() {
     const numberById = new Map((rows ?? []).map((r) => [r.id, r.version_number]))
     return [
       { key: 'id', header: 'ID', render: (r) => <span className="cell-muted">{r.dataset_id}</span> },
-      { key: 'name', header: 'Назва набору', render: (r) => <span className="cell-strong">{r.file_name}</span> },
+      {
+        key: 'name',
+        header: 'Назва набору',
+        render: (r) => (
+          <Link to={`/datasets/${r.dataset_id}`} className="cell-link" title="Перейти до звіту профілювання">
+            <span className="cell-strong">{r.file_name}</span>
+          </Link>
+        ),
+      },
       { key: 'format', header: 'Формат', render: (r) => <span className="cell-muted">{r.format}</span> },
       { key: 'class', header: 'Клас', render: (r) => <ClassBadge value={r.data_class} /> },
       { key: 'status', header: 'Статус версії', render: (r) => <StatusBadge value={r.status} /> },
@@ -50,6 +58,15 @@ export default function DatasetsPage() {
         ),
       },
       { key: 'updated', header: 'Оновлено', render: (r) => <span className="cell-muted">{formatDate(r.updated_at)}</span> },
+      {
+        key: 'actions',
+        header: 'Дії',
+        render: (r) => (
+          <Link to={`/datasets/${r.dataset_id}`} className="btn btn--secondary btn--sm">
+            Профіль
+          </Link>
+        ),
+      },
     ]
   }, [rows])
 

@@ -13,4 +13,7 @@ export const endpoints = {
   login: '/api/auth/login',
   me: '/api/auth/me',
   datasets: '/api/datasets',
+  datasetProfile: (id: number | string) => `/api/datasets/${id}/profile`,
+  datasetPii: (id: number | string) => `/api/datasets/${id}/pii`,
+  datasetPiiColumn: (id: number | string, col: string) => `/api/datasets/${id}/pii/${col}`,
 }

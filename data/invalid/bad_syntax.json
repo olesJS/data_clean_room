@@ -1,0 +1,5 @@
+[
+  {"customer_id": 1, "full_name": "Тест Тестович"},
+  {"customer_id": 2, "full_name": "Інший Клієнт"}
+  {"customer_id": 3, "full_name": "Пропущена кома в рядку вище"}
+]
