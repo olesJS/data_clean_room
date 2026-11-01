@@ -1,0 +1,198 @@
+@startuml
+skinparam classAttributeIconSize 0
+skinparam monochrome false
+skinparam roundcorner 8
+skinparam shadowing false
+skinparam defaultFontName "Segoe UI", Arial, sans-serif
+
+skinparam class {
+    BackgroundColor #FFFFFF
+    BorderColor #2C3E50
+    ArrowColor #2C3E50
+    HeaderBackgroundColor #ECEFF1
+}
+
+' ==========================================
+' Core Entities (13 Entities as per SCRUM-9/39)
+' ==========================================
+
+class User {
+    + id: int
+    + email: string
+    + role: string
+    + created_at: datetime
+    --
+    + login(): bool
+    + request_access(dataset_id: int): ExchangeRequest
+}
+
+class Role {
+    + id: int
+    + name: string
+    + type: string
+    + permissions: list
+    + created_at: datetime
+}
+
+class Policy {
+    + id: int
+    + name: string
+    + type: string
+    + classification_level: string
+    + retention_days: int
+    + allow_raw_access: bool
+    + created_at: datetime
+    --
+    + evaluate_access(user: User, dataset: Dataset): bool
+}
+
+class Dataset {
+    + id: int
+    + name: string
+    + original_filename: string
+    + file_type: string
+    + classification: string
+    + uploaded_by: string
+    + owner_id: int
+    + created_at: datetime
+    --
+    + upload_version(file: File): DatasetVersion
+    + publish(): bool
+    + delete(): bool
+}
+
+class DatasetVersion {
+    + id: int
+    + dataset_id: int
+    + version_num: int
+    + status: string
+    + row_count: int
+    + quality_score: float
+    + file_path: string
+    + created_at: datetime
+    --
+    + run_profiling(): list~ColumnProfile~
+    + evaluate_quality(rules_path: string): dict
+    + detect_pii(): list~PiiFinding~
+}
+
+class ColumnProfile {
+    + id: int
+    + dataset_version_id: int
+    + column_name: string
+    + data_type: string
+    + null_count: int
+    + unique_count: int
+    + duplicate_count: int
+    + created_at: datetime
+    --
+    + calculate_metrics(): void
+}
+
+class QualityRule {
+    + id: int
+    + column_name: string
+    + condition: string
+    + action: string
+    + description: string
+    + created_at: datetime
+    --
+    + apply(df: DataFrame): RuleViolation
+}
+
+class RuleViolation {
+    + id: int
+    + dataset_version_id: int
+    + rule_id: int
+    + column_name: string
+    + violation_count: int
+    + action_taken: string
+    + is_blocking: bool
+    + created_at: datetime
+}
+
+class PiiFinding {
+    + id: int
+    + dataset_version_id: int
+    + column_name: string
+    + pii_type: string
+    + confidence: float
+    + sample_masked: string
+    + created_at: datetime
+    --
+    + verify(): void
+}
+
+class AnonymizationMethod {
+    + id: int
+    + pii_finding_id: int
+    + method_type: string
+    + parameters: dict
+    + is_applied: bool
+    + created_at: datetime
+    --
+    + execute(series: Series): Series
+}
+
+class LegalBasis {
+    + id: string
+    + dataset_id: int
+    + type: string
+    + document_ref: string
+    + date: date
+    + entered_by: int
+    + created_at: datetime
+    --
+    + is_valid(): bool
+}
+
+class ExchangeRequest {
+    + id: int
+    + dataset_id: int
+    + requester_id: int
+    + reviewer_id: int
+    + status: string
+    + purpose: string
+    + created_at: datetime
+    --
+    + approve(reviewer_id: int): void
+    + reject(reviewer_id: int, reason: string): void
+}
+
+class AuditEvent {
+    + id: int
+    + actor: string
+    + action: string
+    + object: string
+    + result: string
+    + timestamp: datetime
+    --
+    + log(): void
+}
+
+' ==========================================
+' Relationships and Multiplicities
+' ==========================================
+
+User "*" --- "1" Role : assigned <
+Policy "1" --- "*" Role : governs >
+Policy "1" --- "*" Dataset : applies to >
+
+User "1" --- "*" Dataset : owns >
+Dataset "1" *--- "1..*" DatasetVersion : contains >
+Dataset "1" --- "0..*" LegalBasis : governed by >
+ExchangeRequest "*" --- "1" Dataset : targets >
+
+User "1" --- "*" ExchangeRequest : submits >
+User "0..1" --- "*" ExchangeRequest : reviews >
+User "0..1" --- "*" AuditEvent : performs >
+
+DatasetVersion "1" *--- "1..*" ColumnProfile : has >
+DatasetVersion "1" *--- "*" PiiFinding : identifies >
+DatasetVersion "1" *--- "*" RuleViolation : records >
+DatasetVersion "1" --- "*" AnonymizationMethod : applies >
+
+QualityRule "1" --- "*" RuleViolation : triggers >
+PiiFinding "0..1" --- "0..1" AnonymizationMethod : resolved by >
+
+@enduml
