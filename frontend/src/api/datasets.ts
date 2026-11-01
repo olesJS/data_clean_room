@@ -1,13 +1,19 @@
 import { config, endpoints } from '../config'
 import { ApiError, NETWORK_ERROR, extractError, notifyUnauthorized, request } from './client'
-import { mockDatasets, mockUpload } from './mock'
+import { mockDatasetProfile, mockDatasets, mockUpload } from './mock'
 import { storage } from '../auth/storage'
-import type { DatasetVersion, UploadResult } from './types'
+import type { DatasetProfileResponse, DatasetVersion, UploadResult } from './types'
 
 /** GET /datasets. Форму відповіді треба підтвердити з D. */
 export function fetchDatasets(): Promise<DatasetVersion[]> {
   if (config.useMock) return mockDatasets()
   return request<DatasetVersion[]>(endpoints.datasets)
+}
+
+/** GET /api/datasets/:id/profile. Отримання результатів профілювання та Quality Score. */
+export function fetchDatasetProfile(id: number | string): Promise<DatasetProfileResponse> {
+  if (config.useMock) return mockDatasetProfile(id)
+  return request<DatasetProfileResponse>(endpoints.datasetProfile(id))
 }
 
 interface UploadParams {
