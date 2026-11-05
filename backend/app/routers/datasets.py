@@ -23,7 +23,6 @@ from app.models import Dataset, User
 from app.profiler import profile_dataframe
 from app.schemas import (
     DatasetProfileResponse,
-    DatasetPIIResponse,
     DatasetResponse,
     PiiFinding,
     PiiScanResponse,
@@ -327,6 +326,7 @@ def list_datasets(
 # Sprint 2 â€” Profile & PII endpoints
 # ---------------------------------------------------------------------------
 
+
 def _load_df_for_dataset(dataset: Dataset) -> "pd.DataFrame":
     """Re-read the stored file and return a DataFrame for re-profiling."""
     import io
@@ -373,7 +373,9 @@ def get_dataset_profile(
         dataset = db.query(Dataset).filter(Dataset.id == dataset_id).first()
 
     if not dataset:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Dataset not found.")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Dataset not found."
+        )
 
     # Re-profile if no cached result
     if dataset.profile_json is None:
@@ -422,7 +424,9 @@ def get_dataset_pii(
         dataset = db.query(Dataset).filter(Dataset.id == dataset_id).first()
 
     if not dataset:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Dataset not found.")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Dataset not found."
+        )
 
     # Ensure profile exists
     if dataset.profile_json is None:
@@ -451,8 +455,18 @@ def get_dataset_pii(
     )
 
     findings = dataset.pii_json or []
-    total_cols = len(dataset.columns) if isinstance(dataset.columns, (dict, list)) else len(findings)
-    pii_count = len([f for f in findings if f.get("pii_type") and f.get("user_confirmed") is not False])
+    total_cols = (
+        len(dataset.columns)
+        if isinstance(dataset.columns, (dict, list))
+        else len(findings)
+    )
+    pii_count = len(
+        [
+            f
+            for f in findings
+            if f.get("pii_type") and f.get("user_confirmed") is not False
+        ]
+    )
 
     return {
         "dataset_id": dataset.id,
@@ -484,13 +498,20 @@ def update_pii_column(
         dataset = db.query(Dataset).filter(Dataset.id == dataset_id).first()
 
     if not dataset:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Dataset not found.")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Dataset not found."
+        )
 
     findings = list(dataset.pii_json or [])
-    found_idx = next((i for i, f in enumerate(findings) if f.get("column_name") == column_name), None)
+    found_idx = next(
+        (i for i, f in enumerate(findings) if f.get("column_name") == column_name), None
+    )
 
     if found_idx is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"PII finding for column '{column_name}' not found.")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"PII finding for column '{column_name}' not found.",
+        )
 
     finding = dict(findings[found_idx])
     finding["user_confirmed"] = payload.user_confirmed
@@ -503,10 +524,27 @@ def update_pii_column(
     active_types = {
         f.get("corrected_pii_type") or f.get("pii_type")
         for f in findings
-        if f.get("user_confirmed") is not False and (f.get("corrected_pii_type") or f.get("pii_type"))
+        if f.get("user_confirmed") is not False
+        and (f.get("corrected_pii_type") or f.get("pii_type"))
     }
-    personal_markers = {"ipn", "passport", "card", "UA_IPN", "UA_PASSPORT", "CREDIT_CARD"}
-    confidential_markers = {"iban", "email", "phone", "person_name", "address", "UA_IBAN", "UA_PHONE", "UA_FULL_NAME"}
+    personal_markers = {
+        "ipn",
+        "passport",
+        "card",
+        "UA_IPN",
+        "UA_PASSPORT",
+        "CREDIT_CARD",
+    }
+    confidential_markers = {
+        "iban",
+        "email",
+        "phone",
+        "person_name",
+        "address",
+        "UA_IBAN",
+        "UA_PHONE",
+        "UA_FULL_NAME",
+    }
 
     if active_types & personal_markers:
         dataset.data_class = "Personal"
@@ -532,6 +570,7 @@ def update_pii_column(
 # ---------------------------------------------------------------------------
 # DELETE /api/datasets/{id} — видалити набір даних (тільки власник-DataProvider)
 # ---------------------------------------------------------------------------
+
 
 @router.delete("/datasets/{dataset_id}", status_code=204)
 @router.delete("/api/datasets/{dataset_id}", status_code=204)

@@ -48,10 +48,10 @@ def _migrate_datasets_columns() -> None:
     startup regardless of whether the columns already exist.
     """
     new_columns = [
-        ("data_class",    "VARCHAR(50)"),
+        ("data_class", "VARCHAR(50)"),
         ("quality_score", "DOUBLE PRECISION"),
-        ("profile_json",  "JSON"),
-        ("pii_json",      "JSON"),
+        ("profile_json", "JSON"),
+        ("pii_json", "JSON"),
     ]
 
     dialect = engine.dialect.name  # 'postgresql', 'sqlite', …
@@ -67,18 +67,12 @@ def _migrate_datasets_columns() -> None:
                     conn.execute(__import__("sqlalchemy").text(stmt))
                 else:
                     # Generic fallback: probe with has_column
-                    inspector = __import__(
-                        "sqlalchemy", fromlist=["inspect"]
-                    ).inspect(engine)
-                    existing = [
-                        c["name"]
-                        for c in inspector.get_columns("datasets")
-                    ]
+                    inspector = __import__("sqlalchemy", fromlist=["inspect"]).inspect(
+                        engine
+                    )
+                    existing = [c["name"] for c in inspector.get_columns("datasets")]
                     if col_name not in existing:
-                        stmt = (
-                            f"ALTER TABLE datasets "
-                            f"ADD COLUMN {col_name} {col_type};"
-                        )
+                        stmt = f"ALTER TABLE datasets ADD COLUMN {col_name} {col_type};"
                         conn.execute(__import__("sqlalchemy").text(stmt))
             except Exception as exc:  # column already exists or other benign error
                 print(f"[DB MIGRATE] Skipping column '{col_name}': {exc}")
