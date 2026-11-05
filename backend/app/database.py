@@ -18,16 +18,12 @@ DATABASE_URL = os.getenv(
 if DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
 
-# Normalize postgresql:// to postgresql+psycopg2:// if psycopg3 is not present
-if DATABASE_URL.startswith("postgresql://") and not DATABASE_URL.startswith(
-    "postgresql+"
-):
-    try:
-        import psycopg  # noqa: F401
-    except ImportError:
-        DATABASE_URL = DATABASE_URL.replace(
-            "postgresql://", "postgresql+psycopg2://", 1
-        )
+# Select the psycopg 3 driver explicitly: SQLAlchemy resolves bare
+# postgresql:// URLs to psycopg2 by default.
+if DATABASE_URL.startswith("postgresql://"):
+    DATABASE_URL = DATABASE_URL.replace(
+        "postgresql://", "postgresql+psycopg://", 1
+    )
 
 connect_args = {}
 if DATABASE_URL.startswith("sqlite"):
@@ -39,11 +35,7 @@ Base = declarative_base()
 
 # Configure Async engine and session (psycopg3 or aiosqlite)
 async_url = DATABASE_URL
-if async_url.startswith("postgresql://"):
-    async_url = async_url.replace("postgresql://", "postgresql+psycopg://", 1)
-elif async_url.startswith("postgresql+psycopg2://"):
-    async_url = async_url.replace("postgresql+psycopg2://", "postgresql+psycopg://", 1)
-elif async_url.startswith("sqlite://") and not async_url.startswith(
+if async_url.startswith("sqlite://") and not async_url.startswith(
     "sqlite+aiosqlite://"
 ):
     async_url = async_url.replace("sqlite://", "sqlite+aiosqlite://", 1)
