@@ -1,4 +1,5 @@
 @startuml
+!pragma layout smetana
 skinparam classAttributeIconSize 0
 skinparam monochrome false
 skinparam roundcorner 8
@@ -12,8 +13,10 @@ skinparam class {
     HeaderBackgroundColor #ECEFF1
 }
 
+title Data Clean Room - Class Diagram (Sprint 2: PR #18 + SCRUM-43 fields)
+
 ' ==========================================
-' Core Entities (13 Entities as per SCRUM-9/39)
+' Core entities
 ' ==========================================
 
 class User {
@@ -24,14 +27,6 @@ class User {
     --
     + login(): bool
     + request_access(dataset_id: int): ExchangeRequest
-}
-
-class Role {
-    + id: int
-    + name: string
-    + type: string
-    + permissions: list
-    + created_at: datetime
 }
 
 class Policy {
@@ -50,47 +45,26 @@ class Dataset {
     + id: int
     + name: string
     + original_filename: string
-    + file_type: string
-    + classification: string
-    + uploaded_by: string
-    + owner_id: int
-    + created_at: datetime
-    --
-    + upload_version(file: File): DatasetVersion
-    + publish(): bool
-    + delete(): bool
-}
-
-class DatasetVersion {
-    + id: int
-    + dataset_id: int
-    + version_num: int
-    + status: string
-    + row_count: int
-    + quality_score: float
     + file_path: string
+    + file_size: int
+    + file_type: string
+    + columns: JSON
+    + row_count: int
+    + uploaded_by: string
+    + data_class: string
+    + quality_score: float
+    + profile_json: JSON
+    + pii_json: JSON
     + created_at: datetime
     --
-    + run_profiling(): list~ColumnProfile~
+    + run_profiling(): List<ColumnProfile>
     + evaluate_quality(rules_path: string): dict
-    + detect_pii(): list~PiiFinding~
-}
-
-class ColumnProfile {
-    + id: int
-    + dataset_version_id: int
-    + column_name: string
-    + data_type: string
-    + null_count: int
-    + unique_count: int
-    + duplicate_count: int
-    + created_at: datetime
-    --
-    + calculate_metrics(): void
+    + detect_pii(): List<PiiFinding>
 }
 
 class QualityRule {
     + id: int
+    + dataset_id: int
     + column_name: string
     + condition: string
     + action: string
@@ -102,7 +76,7 @@ class QualityRule {
 
 class RuleViolation {
     + id: int
-    + dataset_version_id: int
+    + dataset_id: int
     + rule_id: int
     + column_name: string
     + violation_count: int
@@ -111,21 +85,42 @@ class RuleViolation {
     + created_at: datetime
 }
 
-class PiiFinding {
-    + id: int
-    + dataset_version_id: int
+' ColumnProfile and PiiFinding are embedded JSON structures stored in
+' Dataset.profile_json and Dataset.pii_json (PR #18), not separate tables.
+class ColumnProfile <<JSON>> {
+    + name: string
+    + type: string
+    + null_count: int
+    + null_percentage: float
+    + unique_count: int
+    + outliers_count: int
+    + future_dates_count: int
+    + min: float
+    + max: float
+    + mean: float
+    + is_pii: bool
+    + pii_type: string
+    + pii_confidence: float
+    --
+    + calculate_metrics(): void
+}
+
+class PiiFinding <<JSON>> {
     + column_name: string
     + pii_type: string
     + confidence: float
     + sample_masked: string
-    + created_at: datetime
+    + detection_method: string
+    + user_confirmed: bool
+    + corrected_pii_type: string
     --
     + verify(): void
 }
 
 class AnonymizationMethod {
     + id: int
-    + pii_finding_id: int
+    + dataset_id: int
+    + pii_finding_ref: string
     + method_type: string
     + parameters: dict
     + is_applied: bool
@@ -135,7 +130,7 @@ class AnonymizationMethod {
 }
 
 class LegalBasis {
-    + id: string
+    + id: UUID
     + dataset_id: int
     + type: string
     + document_ref: string
@@ -171,28 +166,40 @@ class AuditEvent {
 }
 
 ' ==========================================
-' Relationships and Multiplicities
+' Relationships and multiplicities
 ' ==========================================
 
-User "*" --- "1" Role : assigned <
-Policy "1" --- "*" Role : governs >
+User "1" --- "0..*" Dataset : owns >
 Policy "1" --- "*" Dataset : applies to >
 
-User "1" --- "*" Dataset : owns >
-Dataset "1" *--- "1..*" DatasetVersion : contains >
 Dataset "1" --- "0..*" LegalBasis : governed by >
-ExchangeRequest "*" --- "1" Dataset : targets >
+Dataset "1" --- "0..*" QualityRule : has >
+Dataset "1" --- "0..*" RuleViolation : records >
+Dataset "1" --- "0..*" AnonymizationMethod : applies >
+Dataset "1" *-- "0..*" ColumnProfile : profile_json >
+Dataset "1" *-- "0..*" PiiFinding : pii_json >
 
+ExchangeRequest "*" --- "1" Dataset : targets >
 User "1" --- "*" ExchangeRequest : submits >
 User "0..1" --- "*" ExchangeRequest : reviews >
 User "0..1" --- "*" AuditEvent : performs >
 
-DatasetVersion "1" *--- "1..*" ColumnProfile : has >
-DatasetVersion "1" *--- "*" PiiFinding : identifies >
-DatasetVersion "1" *--- "*" RuleViolation : records >
-DatasetVersion "1" --- "*" AnonymizationMethod : applies >
-
 QualityRule "1" --- "*" RuleViolation : triggers >
 PiiFinding "0..1" --- "0..1" AnonymizationMethod : resolved by >
+
+note bottom of Dataset
+  PR #18 stores profiling and PII as JSON:
+  profile_json -> ColumnProfile[],
+  pii_json -> PiiFinding[].
+  No separate DatasetVersion, ColumnProfile or PiiFinding tables.
+end note
+
+note right of LegalBasis
+  id is a UUID stored as String(36).
+end note
+
+legend right
+  <<JSON>> = embedded JSON structure, not a separate DB table
+endlegend
 
 @enduml
