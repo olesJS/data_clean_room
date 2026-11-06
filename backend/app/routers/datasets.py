@@ -362,15 +362,21 @@ def get_dataset_profile(
     db: Session = Depends(get_db),
 ):
     """Return the cached profile for a dataset (re-computes if missing)."""
-    # Fetch dataset with role-based visibility
+    # Fetch dataset with strict role-based access:
+    # Only the owner (DataProvider) or a DataSteward can inspect raw dataset profiles.
     if current_user.role == "DataProvider":
         dataset = (
             db.query(Dataset)
             .filter(Dataset.id == dataset_id, Dataset.uploaded_by == current_user.email)
             .first()
         )
-    else:
+    elif current_user.role == "DataSteward":
         dataset = db.query(Dataset).filter(Dataset.id == dataset_id).first()
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Consumers cannot inspect raw dataset profiles.",
+        )
 
     if not dataset:
         raise HTTPException(
@@ -414,14 +420,20 @@ def get_dataset_pii(
     db: Session = Depends(get_db),
 ):
     """Return PII scan findings for a dataset in the format expected by UI."""
+    # Only owner (DataProvider) or DataSteward can view raw PII findings
     if current_user.role == "DataProvider":
         dataset = (
             db.query(Dataset)
             .filter(Dataset.id == dataset_id, Dataset.uploaded_by == current_user.email)
             .first()
         )
-    else:
+    elif current_user.role == "DataSteward":
         dataset = db.query(Dataset).filter(Dataset.id == dataset_id).first()
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Consumers cannot inspect dataset PII findings.",
+        )
 
     if not dataset:
         raise HTTPException(
@@ -488,14 +500,20 @@ def update_pii_column(
     db: Session = Depends(get_db),
 ):
     """Confirm or correct a PII finding classification for a column."""
+    # Only owner (DataProvider) or DataSteward can view raw PII findings
     if current_user.role == "DataProvider":
         dataset = (
             db.query(Dataset)
             .filter(Dataset.id == dataset_id, Dataset.uploaded_by == current_user.email)
             .first()
         )
-    else:
+    elif current_user.role == "DataSteward":
         dataset = db.query(Dataset).filter(Dataset.id == dataset_id).first()
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Consumers cannot inspect dataset PII findings.",
+        )
 
     if not dataset:
         raise HTTPException(

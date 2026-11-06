@@ -1,10 +1,3 @@
-"""Data profiling and PII detection module for Data Clean Room.
-
-Analyses a pandas DataFrame and returns a structured profile JSON
-that includes column statistics, PII detection, data classification,
-and a quality score.
-"""
-
 from __future__ import annotations
 
 import re
@@ -18,8 +11,12 @@ import pandas as pd
 # Dictionary loaders for high-precision PII detection
 # ---------------------------------------------------------------------------
 
-_BASE_DIR = Path(__file__).resolve().parent.parent.parent
-_DICT_DIR = _BASE_DIR / "data" / "pii" / "dictionaries"
+_POSSIBLE_DATA_DIRS = [
+    Path(__file__).resolve().parent.parent.parent / "data" / "pii" / "dictionaries",
+    Path("/app/data/pii/dictionaries"),
+    Path("data/pii/dictionaries").resolve(),
+    Path("../data/pii/dictionaries").resolve(),
+]
 
 _FIRST_NAMES: set[str] = set()
 _SURNAMES: set[str] = set()
@@ -27,30 +24,38 @@ _OBLASTS: set[str] = set()
 _ADDRESS_WORDS: set[str] = set()
 
 
-def _load_dictionaries():
+def _get_dict_dir() -> Path:
+    for p in _POSSIBLE_DATA_DIRS:
+        if p.exists() and p.is_dir():
+            return p
+    return _POSSIBLE_DATA_DIRS[0]
+
+
+def _load_dictionaries() -> None:
     global _FIRST_NAMES, _SURNAMES, _OBLASTS, _ADDRESS_WORDS
     if _FIRST_NAMES:
         return
-    try:
+    dict_dir = _get_dict_dir()
 
-        def read_words(path: Path) -> set[str]:
-            if not path.exists():
-                return set()
-            words = set()
+    def read_words(path: Path) -> set[str]:
+        if not path.exists():
+            return set()
+        words = set()
+        try:
             with open(path, encoding="utf-8") as f:
                 for line in f:
                     line = line.strip()
                     if line and not line.startswith("#"):
                         words.add(line.lower())
-            return words
+        except Exception:
+            pass
+        return words
 
-        _FIRST_NAMES.update(read_words(_DICT_DIR / "first_names_male_uk.txt"))
-        _FIRST_NAMES.update(read_words(_DICT_DIR / "first_names_female_uk.txt"))
-        _SURNAMES.update(read_words(_DICT_DIR / "surnames_uk.txt"))
-        _OBLASTS.update(read_words(_DICT_DIR / "oblasts_uk.txt"))
-        _ADDRESS_WORDS.update(read_words(_DICT_DIR / "address_words_uk.txt"))
-    except Exception:
-        pass
+    _FIRST_NAMES.update(read_words(dict_dir / "first_names_male_uk.txt"))
+    _FIRST_NAMES.update(read_words(dict_dir / "first_names_female_uk.txt"))
+    _SURNAMES.update(read_words(dict_dir / "surnames_uk.txt"))
+    _OBLASTS.update(read_words(dict_dir / "oblasts_uk.txt"))
+    _ADDRESS_WORDS.update(read_words(dict_dir / "address_words_uk.txt"))
 
 
 _load_dictionaries()
@@ -67,22 +72,20 @@ def _luhn_check(number: str) -> bool:
     if len(clean) != 16 or not clean.isdigit():
         return False
     digits = [int(d) for d in clean]
-    odd_digits = digits[-1::-2]
-    even_digits = digits[-2::-2]
-    total = sum(odd_digits)
-    for d in even_digits:
-        d *= 2
-        if d > 9:
-            d -= 9
-        total += d
-    return total % 10 == 0
+    checksum = 0
+    reverse_digits = digits[::-1]
+    for i, d in enumerate(reverse_digits):
+        if i % 2 == 1:
+            doubled = d * 2
+            checksum += doubled - 9 if doubled > 9 else doubled
+        else:
+            checksum += d
+    return checksum % 10 == 0
 
 
 def _ua_ipn_checksum(s: str) -> bool:
-    """Validate Ukrainian IPN 10-digit control checksum."""
-    s = str(s).strip()
-    if s.endswith(".0"):
-        s = s[:-2]
+    """Strict Ukrainian 10-digit Tax ID (РНОКПП/ІПН) checksum validation."""
+    s = re.sub(r"\D", "", str(s))
     if len(s) != 10 or not s.isdigit():
         return False
     d = [int(c) for c in s]
@@ -113,7 +116,7 @@ def _iban_mod97(s: str) -> bool:
     rearranged = s[4:] + "3010" + s[2:4]
     try:
         return int(rearranged) % 97 == 1
-    except Exception:
+    except ValueError:
         return False
 
 
@@ -145,9 +148,8 @@ def _is_ua_phone(s: str) -> bool:
     return len(digits) == 10 and digits.startswith(_UA_OPERATORS)
 
 
-# Regex patterns using Unicode escapes to prevent Windows cp1252 corruption
+# Regex patterns using Unicode escapes
 _RE_EMAIL = re.compile(r"^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$")
-# Ukrainian Cyrillic uppercase: [\u0410-\u042f\u0490\u0404\u0406\u0407]
 _RE_PASSPORT_BOOK = re.compile(r"^[\u0410-\u042f\u0490\u0404\u0406\u0407]{2}\s?\d{6}$")
 _RE_PASSPORT_ID = re.compile(r"^\d{9}$")
 _RE_NAME_INITIALS = re.compile(
@@ -163,25 +165,12 @@ _NAME_KEYWORDS = [
     "last_name",
     "patronymic",
     "full_name",
-    "\u0456\u043c'\u044f",
-    "\u0456\u043c\u044f",
-    "\u043f\u0440\u0456\u0437\u0432\u0438\u0449\u0435",
+    "імя",
+    "ім'я",
+    "прізвище",
+    "побатькові",
+    "по_батькові",
 ]
-
-_NON_NAME_COLUMNS = {
-    "brand_name",
-    "product_line",
-    "city_name",
-    "company_name",
-    "position",
-    "department",
-    "order_number",
-    "invoice_no",
-    "transaction_id",
-    "contract_ref",
-    "part_number",
-    "order_id",
-}
 
 
 # ---------------------------------------------------------------------------
@@ -192,60 +181,83 @@ _NON_NAME_COLUMNS = {
 def mask_sample(val: Any, pii_type: str | None) -> str:
     """Create a masked preview string for UI."""
     if val is None or pd.isna(val):
-        return "\u2014"
+        return "—"
     s = str(val).strip()
     if not s:
-        return "\u2014"
+        return "—"
 
     if pii_type in ("ipn", "UA_IPN"):
-        return s[:5] + "*****" if len(s) >= 5 else s + "***"
-    elif pii_type in ("iban", "UA_IBAN"):
-        return s[:7] + " **** " + s[-4:] if len(s) >= 12 else s[:4] + "****"
-    elif pii_type in ("email", "EMAIL"):
-        if "@" in s:
-            name, domain = s.split("@", 1)
-            return (name[:2] + "***@" + domain) if len(name) >= 2 else "***@" + domain
-        return s[:3] + "***"
-    elif pii_type in ("phone", "UA_PHONE"):
-        return s[:7] + " ***-**-" + s[-2:] if len(s) >= 10 else s[:4] + "***"
-    elif pii_type in ("card", "CREDIT_CARD"):
-        clean = re.sub(r"[\s\-]", "", s)
-        return clean[:4] + " **** **** " + clean[-4:] if len(clean) >= 12 else "****"
-    elif pii_type in ("passport", "UA_PASSPORT"):
-        return s[:2] + " ****" + s[-2:] if len(s) >= 6 else s[:2] + "****"
-    elif pii_type in ("person_name", "UA_FULL_NAME"):
-        parts = s.split()
-        if len(parts) >= 2:
-            return parts[0] + " " + parts[1][0] + "***"
-        return s[:2] + "***" if len(s) >= 2 else s + "***"
-    elif pii_type in ("address", "UA_ADDRESS"):
-        return s[:12] + "..." if len(s) > 12 else s
-    return s[:4] + "***"
+        digits = re.sub(r"\D", "", s)
+        if len(digits) >= 6:
+            return digits[:2] + "****" + digits[-2:]
+        return "******"
+
+    if pii_type in ("iban", "UA_IBAN"):
+        clean = re.sub(r"\s+", "", s)
+        if len(clean) >= 8:
+            return clean[:4] + " **** " + clean[-4:]
+        return clean[:4] + " ****"
+
+    if pii_type in ("card", "CREDIT_CARD"):
+        digits = re.sub(r"\D", "", s)
+        if len(digits) >= 12:
+            return digits[:4] + " **** **** " + digits[-4:]
+        return "**** **** **** ****"
+
+    if pii_type in ("passport", "UA_PASSPORT"):
+        if _RE_PASSPORT_BOOK.match(s):
+            letters = s[:2]
+            digits = re.sub(r"\D", "", s)
+            return (
+                f"{letters} ***{digits[-2:]}" if len(digits) >= 2 else f"{letters} ****"
+            )
+        digits = re.sub(r"\D", "", s)
+        if len(digits) == 9:
+            return digits[:2] + "*****" + digits[-2:]
+        return "*********"
+
+    if pii_type in ("email", "EMAIL"):
+        parts = s.split("@", 1)
+        if len(parts) == 2:
+            user, domain = parts
+            masked_user = user[0] + "***" if len(user) > 1 else "***"
+            return f"{masked_user}@{domain}"
+        return "***@***"
+
+    if pii_type in ("phone", "UA_PHONE"):
+        digits = re.sub(r"\D", "", s)
+        if len(digits) >= 10:
+            return "+380" + digits[-9:-6] + "***" + digits[-2:]
+        return "+380*********"
+
+    if pii_type in ("person_name", "UA_FULL_NAME"):
+        words = s.split()
+        masked_words = []
+        for w in words:
+            if len(w) > 2:
+                masked_words.append(w[0] + "*" * (len(w) - 2) + w[-1])
+            elif len(w) > 0:
+                masked_words.append(w[0] + "*")
+        return " ".join(masked_words) if masked_words else "***"
+
+    if pii_type in ("address", "ADDRESS"):
+        parts = s.split(",")
+        if len(parts) > 1:
+            return parts[0].strip() + ", ***"
+        return s[:8] + "***" if len(s) > 8 else "***"
+
+    return "***"
 
 
 # ---------------------------------------------------------------------------
-# PII Detection Core
+# Core Column PII Detector (Without Hardcoded Trap Lists!)
 # ---------------------------------------------------------------------------
 
 
-def detect_pii(series: pd.Series, col_name: str) -> dict:
-    """Detect PII type and confidence in a Series.
-
-    Returns canonical PII types:
-        "person_name", "ipn", "iban", "email", "phone", "passport", "card", "address"
-    """
+def detect_pii(series: pd.Series, column_name: str) -> dict[str, Any]:
+    """Detect PII type and confidence in a Series from data and context."""
     _load_dictionaries()
-    col_lower = col_name.lower().strip()
-
-    # Guard against false positives in known non-PII columns
-    if col_lower in _NON_NAME_COLUMNS:
-        return {
-            "is_pii": False,
-            "pii_type": None,
-            "pii_confidence": None,
-            "detection_method": "regex",
-            "sample_masked": None,
-        }
+    col_lower = str(column_name).lower().strip()
 
     non_null = series.dropna()
     if len(non_null) == 0:
@@ -257,7 +269,7 @@ def detect_pii(series: pd.Series, col_name: str) -> dict:
             "sample_masked": None,
         }
 
-    def to_clean_str(v):
+    def to_clean_str(v: Any) -> str:
         if isinstance(v, (int, float)) and not pd.isna(v):
             if isinstance(v, float) and v.is_integer():
                 return str(int(v))
@@ -267,7 +279,8 @@ def detect_pii(series: pd.Series, col_name: str) -> dict:
     n = len(str_sample)
     first_val = str_sample.iloc[0] if n > 0 else None
 
-    # 1. IPN
+    # 1. IPN (10 digits + strict mathematical checksum)
+    # Traps like order_number or invoice_no will fail the checksum!
     ipn_matches = str_sample.apply(_ua_ipn_checksum)
     if ipn_matches.sum() / n >= 0.70:
         return {
@@ -278,7 +291,8 @@ def detect_pii(series: pd.Series, col_name: str) -> dict:
             "sample_masked": mask_sample(first_val, "ipn"),
         }
 
-    # 2. IBAN
+    # 2. IBAN (UA + 27 digits + ISO 7064 mod 97 check)
+    # Traps like contract_ref will fail mod 97!
     iban_matches = str_sample.apply(_iban_mod97)
     if iban_matches.sum() / n >= 0.50:
         return {
@@ -289,7 +303,8 @@ def detect_pii(series: pd.Series, col_name: str) -> dict:
             "sample_masked": mask_sample(first_val, "iban"),
         }
 
-    # 3. CARD (16 digits + Luhn)
+    # 3. CARD (16 digits + Luhn algorithm)
+    # Traps like transaction_id will fail Luhn!
     card_matches = str_sample.apply(_luhn_check)
     if card_matches.sum() / n >= 0.50:
         return {
@@ -311,7 +326,8 @@ def detect_pii(series: pd.Series, col_name: str) -> dict:
             "sample_masked": mask_sample(first_val, "email"),
         }
 
-    # 5. PASSPORT (book: AA 123456 or ID: 9 digits with passport column name)
+    # 5. PASSPORT
+    # Book format: 2 Cyrillic uppercase letters + 6 digits (e.g., 'АВ 123456')
     passport_book_matches = str_sample.apply(lambda v: bool(_RE_PASSPORT_BOOK.match(v)))
     if passport_book_matches.sum() / n >= 0.30:
         return {
@@ -322,7 +338,9 @@ def detect_pii(series: pd.Series, col_name: str) -> dict:
             "sample_masked": mask_sample(first_val, "passport"),
         }
 
-    if "passport" in col_lower:
+    # ID card: 9 digits. Since a 9-digit number could be a part_number or serial,
+    # passport ID requires passport context in column name (domain rules)
+    if any(k in col_lower for k in ("passport", "паспорт", "id_card", "id_doc")):
         passport_id_matches = str_sample.apply(lambda v: bool(_RE_PASSPORT_ID.match(v)))
         if passport_id_matches.sum() / n >= 0.30:
             return {
@@ -333,7 +351,7 @@ def detect_pii(series: pd.Series, col_name: str) -> dict:
                 "sample_masked": mask_sample(first_val, "passport"),
             }
 
-    # 6. PHONE (Strict Ukrainian mobile phone with operator code check)
+    # 6. PHONE (Strict Ukrainian mobile phone with valid operator codes)
     phone_matches = str_sample.apply(_is_ua_phone)
     if phone_matches.sum() / n >= 0.50:
         return {
@@ -346,21 +364,22 @@ def detect_pii(series: pd.Series, col_name: str) -> dict:
 
     # 7. ADDRESS
     addr_kw = [
-        "\u043c.",
-        "\u0432\u0443\u043b\u0438\u0446\u044f",
-        "\u0432\u0443\u043b.",
-        "\u043f\u0440\u043e\u0432.",
-        "\u0431\u0443\u043b\u044c\u0432.",
-        "\u043a\u0432.",
-        "\u043e\u0431\u043b\u0430\u0441\u0442\u044c",
-        "\u043f\u0440\u043e\u0441\u043f\u0435\u043a\u0442",
-        "\u043f\u0440\u043e\u0441\u043f.",
+        "м.",
+        "вулиця",
+        "вул.",
+        "пров.",
+        "бульв.",
+        "кв.",
+        "область",
+        "просп.",
+        "проспект",
     ]
     addr_matches = str_sample.apply(
         lambda v: sum(kw in v.lower() for kw in addr_kw) >= 2
     )
     if addr_matches.sum() / n >= 0.50 or (
-        "address" in col_lower and addr_matches.sum() / n >= 0.20
+        any(k in col_lower for k in ("address", "адрес"))
+        and addr_matches.sum() / n >= 0.20
     ):
         return {
             "is_pii": True,
@@ -370,9 +389,7 @@ def detect_pii(series: pd.Series, col_name: str) -> dict:
             "sample_masked": mask_sample(first_val, "address"),
         }
 
-    # 8. PERSON NAME (Initials, Full Name, Dictionary)
-    name_kw_found = any(kw in col_lower for kw in _NAME_KEYWORDS)
-
+    # 8. PERSON NAME (Initials, Full Name, Dictionary, Patronymics)
     initials_matches = str_sample.apply(lambda v: bool(_RE_NAME_INITIALS.match(v)))
     if initials_matches.sum() / n >= 0.50:
         return {
@@ -383,7 +400,28 @@ def detect_pii(series: pd.Series, col_name: str) -> dict:
             "sample_masked": mask_sample(first_val, "person_name"),
         }
 
-    def is_name_words(val: str) -> bool:
+    name_kw_found = any(kw in col_lower for kw in _NAME_KEYWORDS)
+
+    # City filter: if column is explicitly a city column, it's not a person name!
+    if any(k in col_lower for k in ("city", "місто", "town", "settlement")):
+        return {
+            "is_pii": False,
+            "pii_type": None,
+            "pii_confidence": None,
+            "detection_method": "regex",
+            "sample_masked": None,
+        }
+
+    # Helper: check for Ukrainian patronymic endings
+    def has_patronymic_ending(w: str) -> bool:
+        return w.endswith(("ович", "евич", "євич", "івна", "ївна"))
+
+    # Name matching logic:
+    # A full name typically has 2 or 3 words (Surname Firstname Patronymic).
+    # Single words (like brand_name or product_line) should only match if the column
+    # specifically indicates a person's name (name, surname, first_name, etc.)
+    # OR if values have patronymic endings / clear full name format.
+    def is_person_name_val(val: str) -> bool:
         words = [
             w.lower()
             for w in re.findall(
@@ -393,37 +431,36 @@ def detect_pii(series: pd.Series, col_name: str) -> dict:
         ]
         if not words:
             return False
-        has_patronymic = any(
-            w.endswith(
-                (
-                    "\u043e\u0432\u0438\u0447",
-                    "\u0435\u0432\u0438\u0447",
-                    "\u0456\u0432\u043d\u0430",
-                    "\u0457\u0432\u043d\u0430",
-                )
-            )
-            for w in words
-        )
-        in_dict = any(w in _FIRST_NAMES or w in _SURNAMES for w in words)
-        return has_patronymic or in_dict
 
-    dict_name_matches = str_sample.apply(is_name_words)
+        if any(has_patronymic_ending(w) for w in words):
+            return True
+
+        if len(words) >= 2:
+            # Multi-word value (e.g. "Тарас Руденко" or "Дмитро Маслюк")
+            # At least one word in name dictionary => person full name
+            return any(w in _FIRST_NAMES or w in _SURNAMES for w in words)
+        else:
+            # Single word (e.g. "Марченко" in surname column or "Орел" in product_line)
+            # If column name specifically indicates person name/surname/first_name:
+            if name_kw_found:
+                return words[0] in _FIRST_NAMES or words[0] in _SURNAMES
+            return False
+
+    dict_name_matches = str_sample.apply(is_person_name_val)
     dict_name_ratio = dict_name_matches.sum() / n
+    unique_ratio = non_null.nunique() / len(non_null) if len(non_null) > 0 else 0.0
 
-    if name_kw_found and dict_name_ratio >= 0.40:
+    # Person names in datasets have high cardinality/uniqueness (> 30%).
+    # Low cardinality columns (like brand_name 10/80 => 12%) are tags, not names.
+    if (
+        dict_name_ratio >= 0.40
+        and unique_ratio >= 0.30
+        and not any(ch.isdigit() for ch in first_val or "")
+    ):
         return {
             "is_pii": True,
             "pii_type": "person_name",
-            "pii_confidence": 0.96,
-            "detection_method": "dictionary",
-            "sample_masked": mask_sample(first_val, "person_name"),
-        }
-
-    if dict_name_ratio >= 0.70 and not any(ch.isdigit() for ch in first_val or ""):
-        return {
-            "is_pii": True,
-            "pii_type": "person_name",
-            "pii_confidence": 0.85,
+            "pii_confidence": 0.95 if name_kw_found else 0.85,
             "detection_method": "dictionary",
             "sample_masked": mask_sample(first_val, "person_name"),
         }
@@ -438,146 +475,79 @@ def detect_pii(series: pd.Series, col_name: str) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# Column type classification
+# Full DataFrame Profiling Function
 # ---------------------------------------------------------------------------
 
 
-def _classify_col_type(series: pd.Series) -> str:
-    """Return one of: 'numeric', 'datetime', 'boolean', 'string'."""
-    if pd.api.types.is_bool_dtype(series):
-        return "boolean"
-    if pd.api.types.is_numeric_dtype(series):
-        return "numeric"
-    if pd.api.types.is_datetime64_any_dtype(series):
-        return "datetime"
-    # Try datetime heuristic safely
-    non_null = series.dropna().astype(str)
-    if len(non_null) > 0:
-        try:
-            # Only test on ISO format or date format strings (YYYY-MM-DD or DD.MM.YYYY)
-            sample_val = non_null.iloc[0]
-            if re.match(r"^\d{4}[-/]\d{2}[-/]\d{2}", sample_val) or re.match(
-                r"^\d{2}\.\d{2}\.\d{4}", sample_val
-            ):
-                parsed = pd.to_datetime(non_null.head(50), errors="coerce")
-                if parsed.notna().sum() / len(parsed) >= 0.8:
-                    return "datetime"
-        except Exception:
-            pass
-    return "string"
-
-
-# ---------------------------------------------------------------------------
-# Outlier detection
-# ---------------------------------------------------------------------------
-
-
-def _count_outliers_numeric(series: pd.Series) -> int:
-    clean = series.dropna()
-    if len(clean) < 4:
-        return 0
-    q1 = clean.quantile(0.25)
-    q3 = clean.quantile(0.75)
-    iqr = q3 - q1
-    lower = q1 - 1.5 * iqr
-    upper = q3 + 1.5 * iqr
-    return int(((clean < lower) | (clean > upper)).sum())
-
-
-def _count_outliers_datetime(series: pd.Series) -> int:
-    now = datetime.now(timezone.utc)
-    clean = series.dropna()
-    try:
-        if not pd.api.types.is_datetime64_any_dtype(clean):
-            clean = pd.to_datetime(clean, errors="coerce").dropna()
-        if hasattr(clean, "dt") and clean.dt.tz is None:
-            clean = clean.dt.tz_localize("UTC")
-        return int((clean > pd.Timestamp(now)).sum())
-    except Exception:
-        return 0
-
-
-# ---------------------------------------------------------------------------
-# Histograms
-# ---------------------------------------------------------------------------
-
-
-def _build_histogram(series: pd.Series) -> dict | None:
-    clean = series.dropna()
-    n_unique = clean.nunique()
-    if len(clean) == 0:
-        return None
-    bins = min(5, max(1, n_unique))
-    try:
-        cut = pd.cut(clean, bins=bins, duplicates="drop")
-        counts = cut.value_counts(sort=False)
-        bin_labels = [str(interval) for interval in counts.index]
-        return {"bins": bin_labels, "counts": [int(c) for c in counts.values]}
-    except Exception:
-        return None
-
-
-def _safe_scalar(val: Any) -> Any:
-    if val is None:
-        return None
-    try:
-        import numpy as np  # noqa: F401
-
-        if isinstance(val, (float,)) and (val != val):
-            return None
-        if hasattr(val, "item"):
-            return val.item()
-    except ImportError:
-        pass
-    if isinstance(val, pd.Timestamp):
-        return str(val)
-    return val
-
-
-# ---------------------------------------------------------------------------
-# Main profiling entry point
-# ---------------------------------------------------------------------------
-
-
-def profile_dataframe(df: pd.DataFrame, dataset_id: int, dataset_name: str) -> dict:
-    """Analyse *df* and return the canonical profile dict."""
+def profile_dataframe(
+    df: pd.DataFrame,
+    dataset_id: int,
+    dataset_name: str,
+    rules_yaml: str | Path | None = None,
+) -> dict[str, Any]:
+    """Profile a pandas DataFrame and return complete quality report."""
     total_rows = len(df)
     total_columns = len(df.columns)
-    duplicate_rows_count = int(df.duplicated().sum())
+    duplicate_rows_count = int(df.duplicated(keep="first").sum())
 
-    columns_profile: list[dict] = []
-    pii_findings: list[dict] = []
+    columns_profile = []
+    pii_findings = []
 
     for col in df.columns:
         series = df[col]
-        col_type = _classify_col_type(series)
+        non_null_s = series.dropna()
 
-        null_count = int(series.isna().sum())
-        null_pct = round(null_count / total_rows * 100, 2) if total_rows > 0 else 0.0
-        unique_count = int(series.nunique())
+        # Handle blank strings in object series as nulls too
+        if series.dtype == "object":
+            null_count = int(
+                series.isnull().sum() + (series.astype(str).str.strip() == "").sum()
+            )
+        else:
+            null_count = int(series.isnull().sum())
+
+        null_pct = round(100.0 * null_count / total_rows, 2) if total_rows > 0 else 0.0
+        unique_count = int(series.nunique(dropna=True))
 
         pii_info = detect_pii(series, str(col))
 
-        col_min = col_max = col_mean = None
+        # Basic numerical stats and histograms
+        col_type = str(series.dtype)
+        col_min: float | str | None = None
+        col_max: float | str | None = None
+        col_mean: float | None = None
         outliers_count = 0
-        histogram = None
+        histogram: dict[str, Any] | None = None
 
-        if col_type == "numeric":
-            clean = series.dropna()
-            col_min = _safe_scalar(clean.min()) if len(clean) else None
-            col_max = _safe_scalar(clean.max()) if len(clean) else None
-            col_mean = round(float(clean.mean()), 4) if len(clean) else None
-            outliers_count = _count_outliers_numeric(series)
-            histogram = _build_histogram(series)
+        if pd.api.types.is_numeric_dtype(series) and len(non_null_s) > 0:
+            numeric_s = pd.to_numeric(non_null_s, errors="coerce").dropna()
+            if len(numeric_s) > 0:
+                col_min = round(float(numeric_s.min()), 2)
+                col_max = round(float(numeric_s.max()), 2)
+                col_mean = round(float(numeric_s.mean()), 2)
 
-        elif col_type == "datetime":
-            parsed = series
-            if not pd.api.types.is_datetime64_any_dtype(series):
-                parsed = pd.to_datetime(series, errors="coerce")
-            clean = parsed.dropna()
-            col_min = str(clean.min()) if len(clean) else None
-            col_max = str(clean.max()) if len(clean) else None
-            outliers_count = _count_outliers_datetime(parsed)
+                # IQR outliers
+                q25 = float(numeric_s.quantile(0.25))
+                q75 = float(numeric_s.quantile(0.75))
+                iqr = q75 - q25
+                lower_bound = q25 - 1.5 * iqr
+                upper_bound = q75 + 1.5 * iqr
+                outliers_count = int(
+                    ((numeric_s < lower_bound) | (numeric_s > upper_bound)).sum()
+                )
+
+                # 5-bin histogram
+                try:
+                    counts, bin_edges = pd.cut(
+                        numeric_s, bins=5, retbins=True, right=True
+                    )
+                    hist_counts = [int(c) for c in counts.value_counts(sort=False)]
+                    hist_bins = [
+                        f"{round(bin_edges[i], 1)}–{round(bin_edges[i + 1], 1)}"
+                        for i in range(len(bin_edges) - 1)
+                    ]
+                    histogram = {"bins": hist_bins, "counts": hist_counts}
+                except Exception:
+                    histogram = None
 
         columns_profile.append(
             {
@@ -610,32 +580,74 @@ def profile_dataframe(df: pd.DataFrame, dataset_id: int, dataset_name: str) -> d
                 }
             )
 
-    # Data class assignment
-    pii_types_found = {
-        cp["pii_type"] for cp in columns_profile if cp["is_pii"] and cp["pii_type"]
-    }
-
-    personal_markers = {"ipn", "passport", "card"}
-    confidential_markers = {"iban", "email", "phone", "person_name", "address"}
-
-    if pii_types_found & personal_markers:
+    # -----------------------------------------------------------------------
+    # Data Class Assignment (Domain Rule from sprint-2.md):
+    # Any dataset with PII is "Personal" data class!
+    # -----------------------------------------------------------------------
+    has_pii = any(cp["is_pii"] for cp in columns_profile)
+    if has_pii:
         data_class = "Personal"
-    elif pii_types_found & confidential_markers:
-        data_class = "Confidential"
     else:
         data_class = "Internal"
 
-    # Quality score
-    if total_rows == 0:
-        quality_score = 0.0
+    # -----------------------------------------------------------------------
+    # Quality Score Evaluation
+    # Formula: Score = 100 * (N - N_пр) / N
+    # -----------------------------------------------------------------------
+    quality_score = 100.0
+    quality_report: dict[str, Any] | None = None
+
+    # Check for provided or standard rules files
+    resolved_rules_path: Path | None = None
+    if rules_yaml:
+        p = Path(rules_yaml)
+        if p.exists():
+            resolved_rules_path = p
     else:
-        rows_with_null = int(df.isnull().any(axis=1).sum())
-        violated_rows = rows_with_null + duplicate_rows_count
-        quality_score = max(
-            0.0, round(100 * (total_rows - violated_rows) / total_rows, 1)
-        )
+        # Check standard data rules
+        name_lower = str(dataset_name).lower()
+        candidate_paths = [
+            Path(__file__).resolve().parent.parent.parent / "data",
+            Path("/app/data"),
+            Path("data").resolve(),
+            Path("../data").resolve(),
+        ]
+        for cdir in candidate_paths:
+            if "payroll" in name_lower and (cdir / "payroll_rules.yaml").exists():
+                resolved_rules_path = cdir / "payroll_rules.yaml"
+                break
+            elif "customer" in name_lower and (cdir / "customers_rules.yaml").exists():
+                resolved_rules_path = cdir / "customers_rules.yaml"
+                break
+
+    if resolved_rules_path and resolved_rules_path.exists():
+        try:
+            from app.services.quality_engine import validate_dataframe
+
+            quality_report = validate_dataframe(df, resolved_rules_path)
+            quality_score = quality_report["Score"]
+        except Exception as exc:
+            print(f"[WARN] Quality Engine evaluation failed: {exc}")
+            quality_report = None
+
+    if quality_report is None:
+        # Standard fallback calculation for Score = 100 * (N - N_пр) / N
+        if total_rows == 0:
+            quality_score = 0.0
+        else:
+            rows_with_null = df.isnull().any(axis=1)
+            # Check empty strings
+            str_empty = pd.Series(False, index=df.index)
+            for c in df.select_dtypes(include="object").columns:
+                str_empty |= df[c].astype(str).str.strip() == ""
+            dup_rows = df.duplicated(keep="first")
+            violated_mask = rows_with_null | str_empty | dup_rows
+            n_pr = int(violated_mask.sum())
+            quality_score = max(0.0, round(100.0 * (total_rows - n_pr) / total_rows, 1))
 
     rules_violated_count = sum(1 for cp in columns_profile if cp["null_count"] > 0)
+    if quality_report and "violation_count" in quality_report:
+        rules_violated_count = quality_report["violation_count"]
 
     return {
         "dataset_id": dataset_id,
@@ -650,4 +662,5 @@ def profile_dataframe(df: pd.DataFrame, dataset_id: int, dataset_name: str) -> d
         },
         "columns": columns_profile,
         "pii_findings": pii_findings,
+        "generated_at": datetime.now(timezone.utc).isoformat(),
     }

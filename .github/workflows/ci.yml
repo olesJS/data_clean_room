@@ -34,6 +34,9 @@ jobs:
 
       - name: Run Pytest
         working-directory: ./backend
+        env:
+          DATABASE_URL: "sqlite:///:memory:"
+          ENV: "test"
         run: |
           pytest
 
