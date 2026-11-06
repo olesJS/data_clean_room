@@ -47,6 +47,7 @@ class YAMLRuleParsingError(QualityEngineException):
 
 ALLOWED_ACTIONS: Set[str] = {"reject", "flag", "block"}
 EMAIL_REGEX_PATTERN = r"^[\w\.-]+@[\w\.-]+\.[a-zA-Z]{2,}$"
+MAX_VIOLATING_INDICES = 100
 
 
 def parse_yaml_rules(yaml_source: Union[str, Path, dict, list]) -> List[Dict[str, Any]]:
@@ -308,8 +309,10 @@ def validate_dataframe(
         include_duplicates_check: Whether to include duplicate rows in Quality Score.
 
     Returns:
-        Dict containing Score, score, total_rows, unique_violating_rows,
+        Dict containing Score, total_rows, unique_violating_rows,
         can_publish, has_blocking_violations, violations, etc.
+        Each violation includes ``violation_count`` and at most
+        ``MAX_VIOLATING_INDICES`` row indices.
     """
     if not isinstance(df, pd.DataFrame):
         raise TypeError(
@@ -322,11 +325,9 @@ def validate_dataframe(
     if n_total == 0:
         return {
             "Score": 100.0,
-            "score": 100.0,
             "total_rows": 0,
             "unique_violating_rows": 0,
             "violation_count": 0,
-            "total_violations": 0,
             "can_publish": True,
             "has_blocking_violations": False,
             "violations": [],
@@ -346,17 +347,19 @@ def validate_dataframe(
         action = rule["action"]
 
         if col not in df.columns:
-            violation_mask = pd.Series(True, index=df.index)
-            v_count = n_total
-            message = f"Column '{col}' not found in DataFrame"
-        else:
-            violation_mask, _ = _evaluate_condition(df[col], cond)
-            v_count = int(violation_mask.sum())
-            message = (
-                f"Rule '{cond}' on column '{col}' violated in {v_count} row(s)"
-                if v_count > 0
-                else "OK"
+            available = ", ".join(str(column) for column in df.columns)
+            raise YAMLRuleParsingError(
+                f"Column '{col}' required by rule '{cond}' was not found "
+                f"in DataFrame. Available columns: {available}."
             )
+
+        violation_mask, _ = _evaluate_condition(df[col], cond)
+        v_count = int(violation_mask.sum())
+        message = (
+            f"Rule '{cond}' on column '{col}' violated in {v_count} row(s)"
+            if v_count > 0
+            else "OK"
+        )
 
         if v_count > 0:
             total_rule_violations += v_count
@@ -374,7 +377,12 @@ def validate_dataframe(
                 "action": action,
                 "violation_count": v_count,
                 "is_blocking": action == "block" and v_count > 0,
-                "violating_indices": df.index[violation_mask].tolist(),
+                "violating_indices": df.index[violation_mask].tolist()[
+                    :MAX_VIOLATING_INDICES
+                ],
+                "violating_indices_truncated": (
+                    v_count > MAX_VIOLATING_INDICES
+                ),
                 "message": message,
             }
         )
@@ -392,22 +400,25 @@ def validate_dataframe(
                 "action": "flag",
                 "violation_count": dup_count,
                 "is_blocking": False,
-                "violating_indices": df.index[dup_mask].tolist(),
+                "violating_indices": df.index[dup_mask].tolist()[
+                    :MAX_VIOLATING_INDICES
+                ],
+                "violating_indices_truncated": (
+                    dup_count > MAX_VIOLATING_INDICES
+                ),
                 "message": f"Found {dup_count} duplicate row(s) in DataFrame",
             }
         )
 
     # 3. Calculate Quality Score: Score = 100 * (N - N_пр) / N
     n_pr = int(score_violating_rows_mask.sum())
-    score = round(100.0 * (n_total - n_pr) / n_total, 2)
+    score = round(100.0 * (n_total - n_pr) / n_total, 1)
 
     return {
         "Score": score,
-        "score": score,
         "total_rows": n_total,
         "unique_violating_rows": n_pr,
         "violation_count": total_rule_violations,
-        "total_violations": total_rule_violations,
         "can_publish": not has_blocking_violations,
         "has_blocking_violations": has_blocking_violations,
         "violations": violations_summary,
