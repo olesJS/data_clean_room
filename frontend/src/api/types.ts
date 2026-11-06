@@ -52,3 +52,42 @@ export interface UploadResult {
   dataset_id?: number
   [key: string]: unknown
 }
+
+export interface ColumnHistogram {
+  bins: string[]
+  counts: number[]
+}
+
+export type ColumnDataType = 'string' | 'numeric' | 'datetime' | 'boolean'
+
+export interface ColumnProfile {
+  name: string
+  type: ColumnDataType
+  null_count: number
+  null_percentage: number
+  unique_count: number
+  is_pii: boolean
+  pii_type: string | null
+  pii_confidence: number | null
+  min: number | string | null
+  max: number | string | null
+  mean: number | null
+  outliers_count: number
+  histogram: ColumnHistogram | null
+}
+
+export interface DatasetProfileSummary {
+  total_rows: number
+  total_columns: number
+  duplicate_rows_count: number
+  rules_violated_count: number
+}
+
+export interface DatasetProfileResponse {
+  dataset_id: number
+  dataset_name: string
+  data_class: DataClass
+  quality_score: number
+  summary: DatasetProfileSummary
+  columns: ColumnProfile[]
+}
