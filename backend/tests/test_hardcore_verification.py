@@ -186,9 +186,7 @@ def test_hardcore_tampered_and_expired_tokens(client, db_session):
     assert res.json() == {"detail": "Not authenticated"}
 
     # 3. Completely bogus string
-    res = client.get(
-        "/audit", headers={"Authorization": "Bearer not_a_real_jwt_token"}
-    )
+    res = client.get("/audit", headers={"Authorization": "Bearer not_a_real_jwt_token"})
     assert res.status_code == 401
 
     # 4. Header without Bearer prefix
@@ -201,9 +199,7 @@ def test_hardcore_tampered_and_expired_tokens(client, db_session):
 
     # Verify audit logs captured unauthorized attempts
     unauth_logs = (
-        db_session.query(AuditLog)
-        .filter(AuditLog.result == "UNAUTHORIZED")
-        .all()
+        db_session.query(AuditLog).filter(AuditLog.result == "UNAUTHORIZED").all()
     )
     assert len(unauth_logs) >= 5
 
@@ -242,9 +238,9 @@ def test_hardcore_sha256_cryptographic_file_immutability(
     disk_sha256 = hashlib.sha256(stored_bytes).hexdigest()
 
     # Exact byte-for-byte SHA256 comparison
-    assert (
-        disk_sha256 == input_sha256
-    ), f"Data corruption! SHA256 mismatch: {disk_sha256} != {input_sha256}"
+    assert disk_sha256 == input_sha256, (
+        f"Data corruption! SHA256 mismatch: {disk_sha256} != {input_sha256}"
+    )
     assert stored_bytes == raw_payload
     assert dataset.file_size == len(raw_payload)
 
@@ -257,9 +253,7 @@ def test_hardcore_large_datasets_stress_500_csv_and_1000_json(
 ):
     """Stress test with 500-row CSV and 1000-row JSON as mentioned in code review."""
     # 1. Generate 500-row realistic payroll CSV with IPN leading zeros
-    csv_lines = [
-        "employee_id,full_name,department,salary,tax_id,hire_date"
-    ]
+    csv_lines = ["employee_id,full_name,department,salary,tax_id,hire_date"]
     for i in range(1, 501):
         # alternate leading zero IPN and empty values
         tax_id = f"0{100000000 + i}" if i % 4 != 0 else ""
@@ -351,9 +345,7 @@ def test_hardcore_cp1251_ukrainian_payroll_semicolon(client, provider_token):
 # =====================================================================
 # 6. HARDCORE MULTI-PROVIDER DATA ISOLATION
 # =====================================================================
-def test_hardcore_multi_provider_data_isolation(
-    client, db_session, steward_token
-):
+def test_hardcore_multi_provider_data_isolation(client, db_session, steward_token):
     """Verify DataProvider A cannot view or list DataProvider B's datasets."""
     # Seed Provider Alpha and Provider Beta
     for email, role in [

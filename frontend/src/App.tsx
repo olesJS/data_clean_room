@@ -9,6 +9,7 @@ import CatalogPage from './pages/CatalogPage'
 import DatasetsPage from './pages/DatasetsPage'
 import LoginPage from './pages/LoginPage'
 import NotFoundPage from './pages/NotFoundPage'
+import PiiPage from './pages/PiiPage'
 import ProfilePage from './pages/ProfilePage'
 import RequestsPage from './pages/RequestsPage'
 import UploadPage from './pages/UploadPage'
@@ -28,6 +29,7 @@ export default function App() {
           <Route element={<RequireRole allow={['DataProvider']} />}>
             <Route path="/datasets" element={<DatasetsPage />} />
             <Route path="/datasets/:id" element={<ProfilePage />} />
+            <Route path="/datasets/:id/pii" element={<PiiPage />} />
             <Route path="/upload" element={<UploadPage />} />
             <Route path="/access" element={<AccessRequestsPage />} />
           </Route>

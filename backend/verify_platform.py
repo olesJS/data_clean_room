@@ -97,9 +97,7 @@ def main():
     # =========================================================================
     section("TIER 1: Core API & Health Endpoints")
     r = client.get("/")
-    assert_check(
-        r.status_code == 200, "GET / returns 200 OK"
-    )
+    assert_check(r.status_code == 200, "GET / returns 200 OK")
     assert_check(
         r.json().get("message") == "Data Clean Room API is up and running",
         "GET / returns proper service title message",
@@ -132,9 +130,7 @@ def main():
     )
 
     # Check password hashing is bcrypt and non-plaintext
-    provider_user = (
-        db.query(User).filter_by(email="provider@example.com").first()
-    )
+    provider_user = db.query(User).filter_by(email="provider@example.com").first()
     assert_check(
         provider_user.hashed_password.startswith("$2b$")
         and "password123" not in provider_user.hashed_password,
@@ -178,8 +174,7 @@ def main():
         "/api/auth/me", headers={"Authorization": f"Bearer {provider_token}"}
     )
     assert_check(
-        r_me.status_code == 200
-        and r_me.json()["email"] == "provider@example.com",
+        r_me.status_code == 200 and r_me.json()["email"] == "provider@example.com",
         "GET /api/auth/me resolves user identity from JWT claims",
     )
 
@@ -301,9 +296,7 @@ def main():
         headers={"Authorization": f"Bearer {provider_token}"},
         files={"file": ("audit_check.csv", io.BytesIO(test_content), "text/csv")},
     )
-    dataset_rec = (
-        db.query(Dataset).filter_by(id=res_upload.json()["id"]).first()
-    )
+    dataset_rec = db.query(Dataset).filter_by(id=res_upload.json()["id"]).first()
 
     with open(dataset_rec.file_path, "rb") as f:
         stored_bytes = f.read()
@@ -389,7 +382,7 @@ def main():
     t_start_csv = time.time()
     csv_stress = "\n".join(
         ["id,name,role,salary,tax_code"]
-        + [f"{i},Worker_{i},Engineer,{20000+i*10},0{i:09d}" for i in range(1, 501)]
+        + [f"{i},Worker_{i},Engineer,{20000 + i * 10},0{i:09d}" for i in range(1, 501)]
     ).encode("utf-8")
     r_500 = client.post(
         "/datasets",
@@ -453,9 +446,7 @@ def main():
         "Audit log captured all events (LOGIN, UPLOAD, DENIED, UNAUTH, LIST)",
     )
 
-    forbidden_records = (
-        db.query(AuditLog).filter_by(result="FORBIDDEN").count()
-    )
+    forbidden_records = db.query(AuditLog).filter_by(result="FORBIDDEN").count()
     assert_check(
         forbidden_records >= 2,
         f"Security incidents: {forbidden_records} FORBIDDEN attempts captured",
