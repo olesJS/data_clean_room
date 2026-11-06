@@ -4,10 +4,24 @@ import { mockDatasetProfile, mockDatasets, mockUpload } from './mock'
 import { storage } from '../auth/storage'
 import type { DatasetProfileResponse, DatasetVersion, UploadResult } from './types'
 
-/** GET /datasets. Форму відповіді треба підтвердити з D. */
-export function fetchDatasets(): Promise<DatasetVersion[]> {
+/** GET /datasets. Мапимо бекенд-відповідь на інтерфейс фронтенду DatasetVersion */
+export async function fetchDatasets(): Promise<DatasetVersion[]> {
   if (config.useMock) return mockDatasets()
-  return request<DatasetVersion[]>(endpoints.datasets)
+  const rawList = await request<Record<string, unknown>[]>(endpoints.datasets)
+
+  return rawList.map((item) => ({
+    id: Number(item.id),
+    dataset_id: Number(item.id),
+    dataset_name: (item.name as string) || '',
+    file_name: (item.original_filename as string) || (item.name as string) || '',
+    format: ((item.file_type as string) || 'CSV').toUpperCase() as 'CSV' | 'JSON',
+    data_class: ((item.data_class as string) || 'Internal') as DatasetVersion['data_class'],
+    status: ((item.status as string) || 'Uploaded') as DatasetVersion['status'],
+    quality_score: (item.quality_score as number | null) ?? null,
+    version_number: 1,
+    parent_version_id: null,
+    updated_at: (item.created_at as string) || new Date().toISOString(),
+  }))
 }
 
 /** GET /api/datasets/:id/profile. Отримання результатів профілювання та Quality Score. */
