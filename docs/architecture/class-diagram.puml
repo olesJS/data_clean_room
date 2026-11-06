@@ -1,0 +1,205 @@
+@startuml
+!pragma layout smetana
+skinparam classAttributeIconSize 0
+skinparam monochrome false
+skinparam roundcorner 8
+skinparam shadowing false
+skinparam defaultFontName "Segoe UI", Arial, sans-serif
+
+skinparam class {
+    BackgroundColor #FFFFFF
+    BorderColor #2C3E50
+    ArrowColor #2C3E50
+    HeaderBackgroundColor #ECEFF1
+}
+
+title Data Clean Room - Class Diagram (Sprint 2: PR #18 + SCRUM-43 fields)
+
+' ==========================================
+' Core entities
+' ==========================================
+
+class User {
+    + id: int
+    + email: string
+    + role: string
+    + created_at: datetime
+    --
+    + login(): bool
+    + request_access(dataset_id: int): ExchangeRequest
+}
+
+class Policy {
+    + id: int
+    + name: string
+    + type: string
+    + classification_level: string
+    + retention_days: int
+    + allow_raw_access: bool
+    + created_at: datetime
+    --
+    + evaluate_access(user: User, dataset: Dataset): bool
+}
+
+class Dataset {
+    + id: int
+    + name: string
+    + original_filename: string
+    + file_path: string
+    + file_size: int
+    + file_type: string
+    + columns: JSON
+    + row_count: int
+    + uploaded_by: string
+    + data_class: string
+    + quality_score: float
+    + profile_json: JSON
+    + pii_json: JSON
+    + created_at: datetime
+    --
+    + run_profiling(): List<ColumnProfile>
+    + evaluate_quality(rules_path: string): dict
+    + detect_pii(): List<PiiFinding>
+}
+
+class QualityRule {
+    + id: int
+    + dataset_id: int
+    + column_name: string
+    + condition: string
+    + action: string
+    + description: string
+    + created_at: datetime
+    --
+    + apply(df: DataFrame): RuleViolation
+}
+
+class RuleViolation {
+    + id: int
+    + dataset_id: int
+    + rule_id: int
+    + column_name: string
+    + violation_count: int
+    + action_taken: string
+    + is_blocking: bool
+    + created_at: datetime
+}
+
+' ColumnProfile and PiiFinding are embedded JSON structures stored in
+' Dataset.profile_json and Dataset.pii_json (PR #18), not separate tables.
+class ColumnProfile <<JSON>> {
+    + name: string
+    + type: string
+    + null_count: int
+    + null_percentage: float
+    + unique_count: int
+    + outliers_count: int
+    + future_dates_count: int
+    + min: float
+    + max: float
+    + mean: float
+    + is_pii: bool
+    + pii_type: string
+    + pii_confidence: float
+    --
+    + calculate_metrics(): void
+}
+
+class PiiFinding <<JSON>> {
+    + column_name: string
+    + pii_type: string
+    + confidence: float
+    + sample_masked: string
+    + detection_method: string
+    + user_confirmed: bool
+    + corrected_pii_type: string
+    --
+    + verify(): void
+}
+
+class AnonymizationMethod {
+    + id: int
+    + dataset_id: int
+    + pii_finding_ref: string
+    + method_type: string
+    + parameters: dict
+    + is_applied: bool
+    + created_at: datetime
+    --
+    + execute(series: Series): Series
+}
+
+class LegalBasis {
+    + id: UUID
+    + dataset_id: int
+    + type: string
+    + document_ref: string
+    + date: date
+    + entered_by: int
+    + created_at: datetime
+    --
+    + is_valid(): bool
+}
+
+class ExchangeRequest {
+    + id: int
+    + dataset_id: int
+    + requester_id: int
+    + reviewer_id: int
+    + status: string
+    + purpose: string
+    + created_at: datetime
+    --
+    + approve(reviewer_id: int): void
+    + reject(reviewer_id: int, reason: string): void
+}
+
+class AuditEvent {
+    + id: int
+    + actor: string
+    + action: string
+    + object: string
+    + result: string
+    + timestamp: datetime
+    --
+    + log(): void
+}
+
+' ==========================================
+' Relationships and multiplicities
+' ==========================================
+
+User "1" --- "0..*" Dataset : owns >
+Policy "1" --- "*" Dataset : applies to >
+
+Dataset "1" --- "0..*" LegalBasis : governed by >
+Dataset "1" --- "0..*" QualityRule : has >
+Dataset "1" --- "0..*" RuleViolation : records >
+Dataset "1" --- "0..*" AnonymizationMethod : applies >
+Dataset "1" *-- "0..*" ColumnProfile : profile_json >
+Dataset "1" *-- "0..*" PiiFinding : pii_json >
+
+ExchangeRequest "*" --- "1" Dataset : targets >
+User "1" --- "*" ExchangeRequest : submits >
+User "0..1" --- "*" ExchangeRequest : reviews >
+User "0..1" --- "*" AuditEvent : performs >
+
+QualityRule "1" --- "*" RuleViolation : triggers >
+PiiFinding "0..1" --- "0..1" AnonymizationMethod : resolved by >
+
+note bottom of Dataset
+  PR #18 stores profiling and PII as JSON:
+  profile_json -> ColumnProfile[],
+  pii_json -> PiiFinding[].
+  No separate DatasetVersion, ColumnProfile or PiiFinding tables.
+end note
+
+note right of LegalBasis
+  id is a UUID stored as String(36).
+end note
+
+legend right
+  <<JSON>> = embedded JSON structure, not a separate DB table
+endlegend
+
+@enduml
