@@ -1,6 +1,12 @@
 import os
+from typing import AsyncGenerator
 
 from sqlalchemy import create_engine
+from sqlalchemy.ext.asyncio import (
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
 from sqlalchemy.orm import declarative_base, sessionmaker
 
 DATABASE_URL = os.getenv(
@@ -12,16 +18,12 @@ DATABASE_URL = os.getenv(
 if DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
 
-# Normalize postgresql:// to postgresql+psycopg2:// if psycopg3 is not present
-if DATABASE_URL.startswith("postgresql://") and not DATABASE_URL.startswith(
-    "postgresql+"
-):
-    try:
-        import psycopg  # noqa: F401
-    except ImportError:
-        DATABASE_URL = DATABASE_URL.replace(
-            "postgresql://", "postgresql+psycopg2://", 1
-        )
+# Select the psycopg 3 driver explicitly: SQLAlchemy resolves bare
+# postgresql:// URLs to psycopg2 by default.
+if DATABASE_URL.startswith("postgresql://"):
+    DATABASE_URL = DATABASE_URL.replace(
+        "postgresql://", "postgresql+psycopg://", 1
+    )
 
 connect_args = {}
 if DATABASE_URL.startswith("sqlite"):
@@ -31,6 +33,28 @@ engine = create_engine(DATABASE_URL, connect_args=connect_args)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
+# Configure Async engine and session (psycopg3 or aiosqlite)
+async_url = DATABASE_URL
+if async_url.startswith("sqlite://") and not async_url.startswith(
+    "sqlite+aiosqlite://"
+):
+    async_url = async_url.replace("sqlite://", "sqlite+aiosqlite://", 1)
+
+async_connect_args = {}
+if "sqlite" in async_url:
+    async_connect_args["check_same_thread"] = False
+
+async_engine = create_async_engine(
+    async_url,
+    echo=False,
+    connect_args=async_connect_args,
+)
+AsyncSessionLocal = async_sessionmaker(
+    bind=async_engine,
+    class_=AsyncSession,
+    expire_on_commit=False,
+)
+
 
 def get_db():
     db = SessionLocal()
@@ -38,6 +62,14 @@ def get_db():
         yield db
     finally:
         db.close()
+
+
+async def get_async_db() -> AsyncGenerator[AsyncSession, None]:
+    async with AsyncSessionLocal() as session:
+        try:
+            yield session
+        finally:
+            await session.close()
 
 
 def init_db():

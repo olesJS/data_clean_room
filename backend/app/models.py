@@ -43,3 +43,15 @@ class Dataset(Base):
     row_count = Column(Integer, nullable=False)
     uploaded_by = Column(String(255), nullable=False)
     created_at = Column(DateTime, default=utc_now, nullable=False)
+
+
+from models.legal_basis import LegalBasis, LegalBasisType  # noqa: E402
+
+__all__ = [
+    "Base",
+    "User",
+    "AuditLog",
+    "Dataset",
+    "LegalBasis",
+    "LegalBasisType",
+]
