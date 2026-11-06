@@ -1,0 +1,23 @@
+# Data Clean Room Quality Rules for Case 2: customers.json
+# Evaluated by Quality Engine (SCRUM-11/40)
+
+- column: age
+  condition: "between(0, 120)"
+  action: reject
+  description: "Вік клієнта повинен бути в діапазоні від 0 до 120 років"
+
+- column: email
+  condition: email
+  action: flag
+  description: "Електронна пошта повинна відповідати валідному формату"
+
+- column: registration_date
+  condition: "<= today"
+  action: reject
+  description: "Дата реєстрації не може бути в майбутньому"
+
+- column: city
+  condition: not_null
+  action: flag
+  description: "Місто не повинно бути порожнім"
+

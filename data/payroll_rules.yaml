@@ -1,0 +1,18 @@
+# Data Clean Room Quality Rules for Case 1: payroll.csv
+# Evaluated by Quality Engine (SCRUM-11/40)
+
+- column: ipn
+  condition: not_null
+  action: flag
+  description: "ІПН не повинен бути порожнім"
+
+- column: amount_uah
+  condition: "> 0"
+  action: reject
+  description: "Сума виплати повинна бути більшою за 0"
+
+- column: payment_date
+  condition: "<= today"
+  action: reject
+  description: "Дата виплати не може бути в майбутньому"
+
