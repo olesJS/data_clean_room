@@ -17,7 +17,7 @@ from fastapi import (
 from sqlalchemy.orm import Session
 
 from app.audit import log_event
-from app.auth import get_current_user, require_roles
+from app.auth import get_current_user, require_role
 from app.database import get_db
 from app.models import Dataset, User
 from app.schemas import DatasetResponse
@@ -41,7 +41,7 @@ MAX_FILE_SIZE = int(os.getenv("MAX_FILE_SIZE", 50 * 1024 * 1024))  # 50MB defaul
 async def upload_dataset(
     file: UploadFile = File(...),
     name: Optional[str] = Form(None),
-    current_user: User = Depends(require_roles(["DataProvider", "DataSteward"])),
+    current_user: User = Depends(require_role("DataProvider")),
     db: Session = Depends(get_db),
 ):
     actor = current_user.email

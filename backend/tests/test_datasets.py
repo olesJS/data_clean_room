@@ -45,6 +45,19 @@ def test_upload_as_consumer_returns_403(client, consumer_token):
     assert "Access forbidden" in response.json()["detail"]
 
 
+
+
+def test_upload_as_steward_returns_403(client, steward_token):
+    """SCRUM-13/41: DataSteward must receive 403 Forbidden on POST /datasets."""
+    csv_content = b"user_id,score\n1,100\n"
+    response = client.post(
+        "/datasets",
+        headers={"Authorization": f"Bearer {steward_token}"},
+        files={"file": ("users.csv", io.BytesIO(csv_content), "text/csv")},
+    )
+    assert response.status_code == 403
+    assert "Access forbidden" in response.json()["detail"]
+
 def test_upload_csv_success(client, db_session, provider_token):
     csv_content = b"user_id,score,active\n101,98.5,True\n102,87.0,False\n"
     response = client.post(
