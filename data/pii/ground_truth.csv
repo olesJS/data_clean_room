@@ -1,0 +1,46 @@
+dataset,column,expected_class,pii_type,trap,note
+payroll.csv,employee_id,none,,no,Внутрішній ідентифікатор працівника
+payroll.csv,full_name,pii,person_name,no,ПІБ
+payroll.csv,ipn,pii,ipn,no,"10 цифр, контрольна цифра"
+payroll.csv,iban,pii,iban,no,"UA + 27 цифр, mod 97"
+payroll.csv,position,none,,no,
+payroll.csv,department,none,,no,
+payroll.csv,amount_uah,none,,no,
+payroll.csv,payment_date,none,,no,
+customers.json,customer_id,none,,no,Технічний ідентифікатор
+customers.json,full_name,pii,person_name,no,Ім'я та прізвище
+customers.json,email,pii,email,no,
+customers.json,phone,pii,phone,no,+380XXXXXXXXX
+customers.json,birth_date,quasi,birth_date,no,"Квазіідентифікатор, у метриках не враховується"
+customers.json,age,none,,no,
+customers.json,city,none,,no,Назви міст не є PII
+customers.json,registration_date,none,,no,
+benchmark_people.csv,record_id,none,,no,
+benchmark_people.csv,surname,pii,person_name,no,Містить рідкісні прізвища поза словником
+benchmark_people.csv,first_name,pii,person_name,no,Містить рідкісні імена поза словником
+benchmark_people.csv,patronymic,pii,person_name,no,По батькові
+benchmark_people.csv,name_initials,pii,person_name,no,Формат «Прізвище І. П.»
+benchmark_people.csv,ipn,pii,ipn,no,Є порожні значення (5%)
+benchmark_people.csv,passport_id,pii,passport,no,"ID-картка: 9 цифр, без контрольної суми"
+benchmark_people.csv,passport_book,pii,passport,no,Книжечка: 2 літери + 6 цифр
+benchmark_people.csv,iban,pii,iban,no,
+benchmark_people.csv,card_number,pii,card,no,"16 цифр, Луна; з пробілами й без"
+benchmark_people.csv,email,pii,email,no,
+benchmark_people.csv,phone,pii,phone,no,П'ять форматів запису
+benchmark_people.csv,address,pii,address,no,"м./с., вулиця, будинок, квартира"
+benchmark_people.csv,birth_date,quasi,birth_date,no,"Квазіідентифікатор, у метриках не враховується"
+benchmark_people.csv,department,none,,no,
+benchmark_people.csv,amount_uah,none,,no,
+benchmark_people.csv,status,none,,no,
+traps.csv,order_id,none,,no,
+traps.csv,order_number,none,,yes,"10 цифр, але контрольна цифра ІПН не збігається"
+traps.csv,invoice_no,none,,yes,"10 цифр, але не ІПН"
+traps.csv,transaction_id,none,,yes,"16 цифр, але не проходить перевірку Луна"
+traps.csv,contract_ref,none,,yes,"UA + 27 цифр, але не проходить mod 97"
+traps.csv,part_number,none,,yes,"9 цифр, схоже на ID-картку, але це номер деталі"
+traps.csv,postal_code,none,,no,
+traps.csv,brand_name,none,,yes,Слова збігаються зі словником імен
+traps.csv,product_line,none,,yes,Слова збігаються зі словником прізвищ
+traps.csv,city_name,none,,yes,"Міста, назви яких схожі на імена"
+traps.csv,price_uah,none,,no,
+traps.csv,quantity,none,,no,
