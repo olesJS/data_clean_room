@@ -463,7 +463,7 @@ const payrollRules: QualityRule[] = [
 
 const customersRules: QualityRule[] = [
   { column: 'age', condition: 'between(0, 120)', action: 'reject', description: 'Вік має бути від 0 до 120 років' },
-  { column: 'registered_at', condition: '<= today', action: 'reject', description: 'Дата реєстрації не може бути в майбутньому' },
+  { column: 'registration_date', condition: '<= today', action: 'reject', description: 'Дата реєстрації не може бути в майбутньому' },
   { column: 'email', condition: 'email', action: 'flag', description: 'Електронна пошта повинна мати коректний формат' },
   { column: 'city', condition: 'not_null', action: 'flag', description: 'Місто не повинно бути порожнім' },
   duplicateRule,
@@ -497,7 +497,7 @@ const customersReport: QualityReport = {
   summary: { duplicate_rows_count: 15 },
   violations: [
     violation('age', 'between(0, 120)', 'reject', 20),
-    violation('registered_at', '<= today', 'reject', 30),
+    violation('registration_date', '<= today', 'reject', 30),
     violation('email', 'email', 'flag', 25),
     violation('city', 'not_null', 'flag', 40),
     violation('*', 'not_duplicated', 'flag', 15),

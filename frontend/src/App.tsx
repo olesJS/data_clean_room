@@ -31,9 +31,11 @@ export default function App() {
             <Route path="/datasets" element={<DatasetsPage />} />
             <Route path="/datasets/:id" element={<ProfilePage />} />
             <Route path="/datasets/:id/pii" element={<PiiPage />} />
-            <Route path="/datasets/:id/quality" element={<QualityRulesPage />} />
             <Route path="/upload" element={<UploadPage />} />
             <Route path="/access" element={<AccessRequestsPage />} />
+          </Route>
+          <Route element={<RequireRole allow={['DataProvider', 'DataSteward']} />}>
+            <Route path="/datasets/:id/quality" element={<QualityRulesPage />} />
           </Route>
           <Route element={<RequireRole allow={['DataConsumer', 'DataSteward']} />}>
             <Route path="/catalog" element={<CatalogPage />} />

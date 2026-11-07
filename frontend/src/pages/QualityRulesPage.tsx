@@ -37,8 +37,8 @@ function errorStatus(error: unknown): number | undefined {
 function describeError(status: number | undefined): { title: string; text: string; retry: boolean } {
   if (status === 404) {
     return {
-      title: 'Набір ще не профільовано',
-      text: 'Після профілювання тут з’являться правила та порушення.',
+      title: 'Правила й порушення для цього набору недоступні',
+      text: 'Після налаштування правил якості та профілювання тут з’являться результати перевірки.',
       retry: false,
     }
   }
@@ -222,7 +222,7 @@ function Report({ rules, report }: { rules: QualityRule[]; report: QualityReport
         <div className="qr-banner" role="status">
           <p className="qr-banner__title">Публікацію заблоковано</p>
           <p className="qr-banner__text">
-            Порушень із дією block: {integer.format(report.action_counts.block)}. Виправте дані й завантажте нову версію набору.
+            Порушень із дією block: {integer.format(report.action_counts.block)}. Виправте дані й завантажте набір повторно.
           </p>
         </div>
       ) : null}
