@@ -33,7 +33,6 @@ class LegalBasis(Base):
         String(36),
         primary_key=True,
         default=lambda: str(uuid.uuid4()),
-        index=True,
     )
     dataset_id: Mapped[int] = mapped_column(
         Integer,
