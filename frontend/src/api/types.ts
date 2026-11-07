@@ -133,3 +133,36 @@ export interface PiiScanResponse {
   total_columns: number
   findings: PiiFinding[]
 }
+
+// ─── Quality Rules & Violations types (SCRUM-49) ──────────────────────────────
+
+export type QualityAction = 'reject' | 'flag' | 'block'
+
+export interface QualityRule {
+  column: string // '*' для перевірок усього рядка
+  condition: string // "between(0, 120)", "> 0", "email", "not_null", "<= today"
+  action: QualityAction
+  description: string
+}
+
+export interface QualityViolation {
+  column: string
+  condition: string
+  action: QualityAction
+  violation_count: number
+  is_blocking: boolean
+  message?: string
+  violating_indices?: number[] | null // віддається лише за ?include_indices=true, екран не використовує
+}
+
+export interface QualityReport {
+  dataset_id: number
+  score: number
+  total_rows: number
+  unique_violating_rows: number
+  can_publish: boolean
+  has_blocking_violations: boolean
+  action_counts: Record<QualityAction, number>
+  summary?: { duplicate_rows_count?: number }
+  violations: QualityViolation[]
+}
