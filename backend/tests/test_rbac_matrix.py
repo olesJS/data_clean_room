@@ -5,6 +5,9 @@
 
 Кожен рядок матриці є окремим тест-кейсом. Для кожної відмови (401, 403)
 перевіряється запис у журналі аудиту. Новий ендпоінт додається рядком у MATRIX.
+
+Обсяг: ендпоінти, які є в main. Ендпоінти PR #15 і #18 (правова підстава,
+профіль, PII, видалення) додаються після їх злиття в задачі SCRUM-51.
 """
 
 import io
@@ -251,10 +254,10 @@ def test_provider_sees_only_own_datasets(client):
 @pytest.mark.xfail(
     strict=True,
     reason=(
-        "Дефект: GET /datasets повертає Data Consumer усі завантажені "
+        "SCRUM-52: GET /datasets повертає Data Consumer усі завантажені "
         "(неопубліковані) набори. За матрицею 3.2 сирий набір Consumer "
         "заборонено, решта доступна лише Public або після схвалення запиту. "
-        "Зняти xfail після виправлення."
+        "Зняти xfail після виправлення SCRUM-52."
     ),
 )
 def test_consumer_does_not_see_unpublished_datasets(client):
