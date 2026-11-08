@@ -1,15 +1,10 @@
 """Pydantic v2 schemas for Legal Basis."""
 
 import datetime as dt
-from enum import Enum
 
 from pydantic import BaseModel, ConfigDict, Field
 
-
-class LegalBasisType(str, Enum):
-    CONSENT = "consent"
-    CONTRACT = "contract"
-    LAW = "law"
+from app.models import LegalBasisType
 
 
 class LegalBasisCreate(BaseModel):

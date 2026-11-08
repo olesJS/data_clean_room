@@ -1,12 +1,6 @@
 import os
-from typing import AsyncGenerator
 
 from sqlalchemy import create_engine
-from sqlalchemy.ext.asyncio import (
-    AsyncSession,
-    async_sessionmaker,
-    create_async_engine,
-)
 from sqlalchemy.orm import declarative_base, sessionmaker
 
 DATABASE_URL = os.getenv(
@@ -33,43 +27,12 @@ engine = create_engine(DATABASE_URL, connect_args=connect_args)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
-# Configure Async engine and session (psycopg3 or aiosqlite)
-async_url = DATABASE_URL
-if async_url.startswith("sqlite://") and not async_url.startswith(
-    "sqlite+aiosqlite://"
-):
-    async_url = async_url.replace("sqlite://", "sqlite+aiosqlite://", 1)
-
-async_connect_args = {}
-if "sqlite" in async_url:
-    async_connect_args["check_same_thread"] = False
-
-async_engine = create_async_engine(
-    async_url,
-    echo=False,
-    connect_args=async_connect_args,
-)
-AsyncSessionLocal = async_sessionmaker(
-    bind=async_engine,
-    class_=AsyncSession,
-    expire_on_commit=False,
-)
-
-
 def get_db():
     db = SessionLocal()
     try:
         yield db
     finally:
         db.close()
-
-
-async def get_async_db() -> AsyncGenerator[AsyncSession, None]:
-    async with AsyncSessionLocal() as session:
-        try:
-            yield session
-        finally:
-            await session.close()
 
 
 def init_db():

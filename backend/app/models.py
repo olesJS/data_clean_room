@@ -1,6 +1,10 @@
+import enum
+import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import JSON, Column, DateTime, Integer, String
+from sqlalchemy import JSON, Column, Date, DateTime, ForeignKey, Integer, String
+from sqlalchemy import Enum as SQLEnum
+from sqlalchemy.orm import relationship
 
 from app.database import Base
 
@@ -45,7 +49,47 @@ class Dataset(Base):
     created_at = Column(DateTime, default=utc_now, nullable=False)
 
 
-from models.legal_basis import LegalBasis, LegalBasisType  # noqa: E402
+class LegalBasisType(str, enum.Enum):
+    CONSENT = "consent"
+    CONTRACT = "contract"
+    LAW = "law"
+
+
+class LegalBasis(Base):
+    """Registry of legal bases (consent, contract, law) for datasets.
+
+    Enforces data governance compliance before dataset publication.
+    """
+
+    __tablename__ = "legal_basis"
+
+    id = Column(
+        String(36),
+        primary_key=True,
+        default=lambda: str(uuid.uuid4()),
+    )
+    dataset_id = Column(
+        Integer,
+        ForeignKey("datasets.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    type = Column(
+        SQLEnum(LegalBasisType, name="legal_basis_type_enum"),
+        nullable=False,
+    )
+    document_ref = Column(String(255), nullable=False)
+    date = Column(Date, nullable=False)
+    entered_by = Column(
+        Integer,
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    created_at = Column(DateTime, default=utc_now, nullable=False)
+
+    dataset = relationship("Dataset", backref="legal_bases")
+    user = relationship("User", backref="entered_legal_bases")
+
 
 __all__ = [
     "Base",
