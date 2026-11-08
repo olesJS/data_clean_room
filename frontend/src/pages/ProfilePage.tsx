@@ -133,6 +133,12 @@ export default function ProfilePage() {
         </div>
 
         <div className="profile-actions">
+          <Link to={`/datasets/${datasetId}/quality`} className="btn btn--secondary">
+            Правила якості
+          </Link>
+          <Link to={`/datasets/${datasetId}/pii`} className="btn btn--secondary">
+            PII результати
+          </Link>
           <Button variant="secondary" onClick={loadProfile} disabled={loading}>
             <IconRefresh size={16} />
             <span>Оновити</span>

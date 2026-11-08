@@ -7,6 +7,9 @@ import type {
   PiiScanResponse,
   PiiType,
   PiiUpdatePayload,
+  QualityReport,
+  QualityRule,
+  QualityViolation,
   Role,
   UploadResult,
   User,
@@ -425,4 +428,128 @@ export async function mockPiiUpdate(
       : list[idx].pii_type) as PiiType,
   }
   return { ...list[idx] }
+}
+
+// ─── Quality Rules & Violations mock data (SCRUM-49) ──────────────────────────
+
+type QualityScenario = 'payroll' | 'customers' | 'blocked' | 'empty'
+
+const violation = (
+  column: string,
+  condition: string,
+  action: QualityViolation['action'],
+  count: number,
+): QualityViolation => ({
+  column,
+  condition,
+  action,
+  violation_count: count,
+  is_blocking: action === 'block' && count > 0,
+})
+
+const duplicateRule: QualityRule = {
+  column: '*',
+  condition: 'not_duplicated',
+  action: 'flag',
+  description: 'Повні копії рядків (друге й наступні входження)',
+}
+
+const payrollRules: QualityRule[] = [
+  { column: 'amount_uah', condition: '> 0', action: 'reject', description: 'Сума виплати повинна бути більшою за 0' },
+  { column: 'payment_date', condition: '<= today', action: 'reject', description: 'Дата виплати не може бути в майбутньому' },
+  { column: 'ipn', condition: 'not_null', action: 'flag', description: 'ІПН не повинен бути порожнім' },
+  duplicateRule,
+]
+
+const customersRules: QualityRule[] = [
+  { column: 'age', condition: 'between(0, 120)', action: 'reject', description: 'Вік має бути від 0 до 120 років' },
+  { column: 'registration_date', condition: '<= today', action: 'reject', description: 'Дата реєстрації не може бути в майбутньому' },
+  { column: 'email', condition: 'email', action: 'flag', description: 'Електронна пошта повинна мати коректний формат' },
+  { column: 'city', condition: 'not_null', action: 'flag', description: 'Місто не повинно бути порожнім' },
+  duplicateRule,
+]
+
+const payrollReport: QualityReport = {
+  dataset_id: 1,
+  score: 91.8,
+  total_rows: 500,
+  unique_violating_rows: 41,
+  can_publish: true,
+  has_blocking_violations: false,
+  action_counts: { reject: 16, flag: 25, block: 0 },
+  summary: { duplicate_rows_count: 10 },
+  violations: [
+    violation('amount_uah', '> 0', 'reject', 8),
+    violation('payment_date', '<= today', 'reject', 8),
+    violation('ipn', 'not_null', 'flag', 15),
+    violation('*', 'not_duplicated', 'flag', 10),
+  ],
+}
+
+const customersReport: QualityReport = {
+  dataset_id: 2,
+  score: 87.0,
+  total_rows: 1000,
+  unique_violating_rows: 130,
+  can_publish: true,
+  has_blocking_violations: false,
+  action_counts: { reject: 50, flag: 80, block: 0 },
+  summary: { duplicate_rows_count: 15 },
+  violations: [
+    violation('age', 'between(0, 120)', 'reject', 20),
+    violation('registration_date', '<= today', 'reject', 30),
+    violation('email', 'email', 'flag', 25),
+    violation('city', 'not_null', 'flag', 40),
+    violation('*', 'not_duplicated', 'flag', 15),
+  ],
+}
+
+const blockedReport: QualityReport = {
+  ...payrollReport,
+  can_publish: false,
+  has_blocking_violations: true,
+  action_counts: { reject: 16, flag: 25, block: 3 },
+  violations: [...payrollReport.violations, violation('iban', 'iban_ua', 'block', 3)],
+}
+
+const emptyReport: QualityReport = {
+  dataset_id: 3,
+  score: 100,
+  total_rows: 300,
+  unique_violating_rows: 0,
+  can_publish: true,
+  has_blocking_violations: false,
+  action_counts: { reject: 0, flag: 0, block: 0 },
+  summary: { duplicate_rows_count: 0 },
+  violations: [],
+}
+
+function qualityScenario(): QualityScenario {
+  const name = new URLSearchParams(window.location.search).get('mock')
+  return name === 'customers' || name === 'blocked' || name === 'empty' ? name : 'payroll'
+}
+
+export async function mockQualityRules(datasetId?: number | string): Promise<QualityRule[]> {
+  await delay(400)
+  const scenario = qualityScenario()
+  const numId = Number(datasetId)
+  if (scenario === 'customers' || numId === 2 || numId === 103) return customersRules
+  if (scenario === 'blocked') {
+    return [
+      ...payrollRules.slice(0, 3),
+      { column: 'iban', condition: 'iban_ua', action: 'block', description: 'IBAN має відповідати формату UA' },
+      duplicateRule,
+    ]
+  }
+  return payrollRules
+}
+
+export async function mockQualityReport(datasetId?: number | string): Promise<QualityReport> {
+  await delay(400)
+  const scenario = qualityScenario()
+  const numId = Number(datasetId)
+  if (scenario === 'customers' || numId === 2 || numId === 103) return customersReport
+  if (scenario === 'blocked') return blockedReport
+  if (scenario === 'empty') return emptyReport
+  return payrollReport
 }

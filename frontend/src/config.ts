@@ -16,4 +16,6 @@ export const endpoints = {
   datasetProfile: (id: number | string) => `/api/datasets/${id}/profile`,
   datasetPii: (id: number | string) => `/api/datasets/${id}/pii`,
   datasetPiiColumn: (id: number | string, col: string) => `/api/datasets/${id}/pii/${encodeURIComponent(col)}`,
+  datasetQualityRules: (id: number | string) => `/api/datasets/${id}/quality-rules`,
+  datasetQualityViolations: (id: number | string) => `/api/datasets/${id}/quality-violations`,
 }
