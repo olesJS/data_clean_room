@@ -104,7 +104,7 @@ def test_profile_dataframe_data_class_internal():
 
 
 def test_consumer_and_non_owner_provider_rbac(client):
-    """Consumer and non-owner Provider must get 403 when accessing profiles."""
+    """Consumer gets 403; non-owner Provider gets 404 (PO decision 8)."""
     p_login = client.post(
         "/api/auth/login",
         json={"email": "provider@example.com", "password": "password123"},
@@ -146,12 +146,53 @@ def test_consumer_and_non_owner_provider_rbac(client):
     )
     assert res_pii.status_code == status.HTTP_403_FORBIDDEN
 
-    # 3. Steward has full access -> 200 OK
+    # 3. Another Provider attempts access -> 404 Not Found (PO Decision 8)
+    other_login = client.post(
+        "/api/auth/login",
+        json={"email": "other_p@example.com", "password": "password123"},
+    )
+    if other_login.status_code != 200:
+        from app.auth import hash_password
+        from app.database import SessionLocal
+        from app.models import User
+
+        db = SessionLocal()
+        if not db.query(User).filter(User.email == "other_p@example.com").first():
+            db.add(
+                User(
+                    email="other_p@example.com",
+                    hashed_password=hash_password("password123"),
+                    role="DataProvider",
+                )
+            )
+            db.commit()
+        db.close()
+        other_login = client.post(
+            "/api/auth/login",
+            json={"email": "other_p@example.com", "password": "password123"},
+        )
+    other_token = other_login.json()["access_token"]
+
+    res_other_prof = client.get(
+        f"/api/datasets/{dataset_id}/profile",
+        headers={"Authorization": f"Bearer {other_token}"},
+    )
+    assert res_other_prof.status_code == status.HTTP_404_NOT_FOUND
+
+    # 4. Steward has full access -> 200 OK
     res_steward = client.get(
         f"/api/datasets/{dataset_id}/profile",
         headers={"Authorization": f"Bearer {steward_token}"},
     )
     assert res_steward.status_code == status.HTTP_200_OK
+
+    # 5. Steward CANNOT edit PII classification (PO Decision 1) -> 403 Forbidden
+    res_steward_patch = client.patch(
+        f"/api/datasets/{dataset_id}/pii/name",
+        headers={"Authorization": f"Bearer {steward_token}"},
+        json={"user_confirmed": True},
+    )
+    assert res_steward_patch.status_code == status.HTTP_403_FORBIDDEN
 
 
 def test_update_pii_column_maintains_personal_class(client):
@@ -215,8 +256,7 @@ def test_update_pii_column_maintains_personal_class(client):
 def test_real_data_defects_payroll():
     """Verify defects in data/payroll.csv match data/defects.md expectations."""
     payroll_csv = DATA_DIR / "payroll.csv"
-    if not payroll_csv.exists():
-        return
+    assert payroll_csv.exists(), f"File not found: {payroll_csv}"
     df = pd.read_csv(payroll_csv)
     profile = profile_dataframe(df, 1, "payroll.csv")
 
@@ -236,22 +276,24 @@ def test_real_data_defects_payroll():
     assert set(pii_cols) == {"full_name", "ipn", "iban"}
     assert profile["data_class"] == "Personal"
 
-    # 5. Quality Engine validation on payroll_rules.yaml
+    # 5. Quality Score is 91.8
+    assert profile["quality_score"] == 91.8
+
+    # 6. Quality Engine validation on payroll_rules.yaml
     rules_path = DATA_DIR / "payroll_rules.yaml"
-    if rules_path.exists():
-        q_res = validate_dataframe(df, rules_path)
-        v_by_col = {v["column"]: v["violation_count"] for v in q_res["violations"]}
-        assert v_by_col["ipn"] == 15
-        assert v_by_col["amount_uah"] == 8
-        assert v_by_col["payment_date"] == 8
-        assert v_by_col["*"] == 10
+    assert rules_path.exists(), f"Rules file not found: {rules_path}"
+    q_res = validate_dataframe(df, rules_path)
+    v_by_col = {v["column"]: v["violation_count"] for v in q_res["violations"]}
+    assert v_by_col["ipn"] == 15
+    assert v_by_col["amount_uah"] == 8
+    assert v_by_col["payment_date"] == 8
+    assert v_by_col["*"] == 10
 
 
 def test_real_data_defects_customers():
     """Verify defects in data/customers.json match data/defects.md expectations."""
     customers_json = DATA_DIR / "customers.json"
-    if not customers_json.exists():
-        return
+    assert customers_json.exists(), f"File not found: {customers_json}"
     df = pd.read_json(customers_json)
     profile = profile_dataframe(df, 2, "customers.json")
 
@@ -271,16 +313,19 @@ def test_real_data_defects_customers():
     assert set(pii_cols) == {"full_name", "email", "phone"}
     assert profile["data_class"] == "Personal"
 
-    # 5. Quality Engine validation on customers_rules.yaml
+    # 5. Quality Score is 87.0
+    assert profile["quality_score"] == 87.0
+
+    # 6. Quality Engine validation on customers_rules.yaml
     rules_path = DATA_DIR / "customers_rules.yaml"
-    if rules_path.exists():
-        q_res = validate_dataframe(df, rules_path)
-        v_by_col = {v["column"]: v["violation_count"] for v in q_res["violations"]}
-        assert v_by_col["age"] == 20
-        assert v_by_col["email"] == 25
-        assert v_by_col["registration_date"] == 30
-        assert v_by_col["city"] == 40
-        assert v_by_col["*"] == 15
+    assert rules_path.exists(), f"Rules file not found: {rules_path}"
+    q_res = validate_dataframe(df, rules_path)
+    v_by_col = {v["column"]: v["violation_count"] for v in q_res["violations"]}
+    assert v_by_col["age"] == 20
+    assert v_by_col["email"] == 25
+    assert v_by_col["registration_date"] == 30
+    assert v_by_col["city"] == 40
+    assert v_by_col["*"] == 15
 
 
 def test_mask_sample_function():

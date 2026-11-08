@@ -18,7 +18,7 @@ from fastapi import (
 from sqlalchemy.orm import Session
 
 from app.audit import log_event
-from app.auth import get_current_user, require_role, require_roles
+from app.auth import get_current_user, require_role
 from app.database import get_db
 from app.models import Dataset, User
 from app.profiler import profile_dataframe
@@ -365,10 +365,9 @@ def _get_accessible_dataset(
 ) -> Dataset:
     """Validate RBAC and return dataset.
 
-    UC-03 EX1 and UC-05 EX3:
     - DataConsumer cannot inspect raw profiles or PII -> 403 Forbidden
-    - DataProvider requesting someone else's dataset -> 403 Forbidden
-    - Non-existent dataset -> 404 Not Found
+    - Non-existent dataset OR dataset owned by another DataProvider -> 404 Not Found
+      (PO decision 8: prevents dataset enumeration)
     """
     actor = current_user.email
     target_object = f"dataset:{dataset_id}"
@@ -387,7 +386,13 @@ def _get_accessible_dataset(
         )
 
     dataset = db.query(Dataset).filter(Dataset.id == dataset_id).first()
-    if not dataset:
+    is_foreign_provider_dataset = (
+        dataset is not None
+        and current_user.role == "DataProvider"
+        and dataset.uploaded_by != current_user.email
+    )
+
+    if not dataset or is_foreign_provider_dataset:
         log_event(
             actor=actor,
             action=action,
@@ -398,22 +403,6 @@ def _get_accessible_dataset(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Dataset not found.",
-        )
-
-    if (
-        current_user.role == "DataProvider"
-        and dataset.uploaded_by != current_user.email
-    ):
-        log_event(
-            actor=actor,
-            action=action,
-            object=target_object,
-            result="FORBIDDEN",
-            db=db,
-        )
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Access forbidden: you do not own this dataset.",
         )
 
     return dataset
@@ -535,10 +524,14 @@ def update_pii_column(
     dataset_id: int,
     column_name: str,
     payload: PiiUpdatePayload,
-    current_user: User = Depends(require_roles(["DataProvider", "DataSteward"])),
+    current_user: User = Depends(require_role("DataProvider")),
     db: Session = Depends(get_db),
 ):
-    """Confirm or correct a PII finding classification for a column."""
+    """Confirm or correct a PII finding classification for a column.
+
+    PO Decision 1: Only the owning DataProvider can edit PII classification.
+    DataSteward has read-only (masked) view and cannot edit.
+    """
     dataset = _get_accessible_dataset(
         dataset_id, current_user, db, action="UPDATE_PII_CLASSIFICATION"
     )
