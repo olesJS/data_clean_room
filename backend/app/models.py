@@ -2,7 +2,7 @@ import enum
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import JSON, Column, Date, DateTime, ForeignKey, Integer, String
+from sqlalchemy import JSON, Column, Date, DateTime, Float, ForeignKey, Integer, String
 from sqlalchemy import Enum as SQLEnum
 from sqlalchemy.orm import relationship
 
@@ -47,6 +47,11 @@ class Dataset(Base):
     row_count = Column(Integer, nullable=False)
     uploaded_by = Column(String(255), nullable=False)
     created_at = Column(DateTime, default=utc_now, nullable=False)
+    # Sprint 2 profiling fields
+    data_class = Column(String(50), nullable=True)
+    quality_score = Column(Float, nullable=True)
+    profile_json = Column(JSON, nullable=True)
+    pii_json = Column(JSON, nullable=True)
 
 
 class LegalBasisType(str, enum.Enum):
