@@ -3,6 +3,12 @@ from typing import Any, Dict
 
 from pydantic import BaseModel, ConfigDict
 
+from app.schemas.legal_basis import (
+    LegalBasisCreate,
+    LegalBasisResponse,
+    LegalBasisType,
+)
+
 
 class LoginRequest(BaseModel):
     email: str
@@ -46,3 +52,16 @@ class DatasetResponse(BaseModel):
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+__all__ = [
+    "LoginRequest",
+    "TokenResponse",
+    "UserResponse",
+    "AuditLogResponse",
+    "DatasetResponse",
+    "LegalBasisCreate",
+    "LegalBasisResponse",
+    "LegalBasisType",
+]
+
