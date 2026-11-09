@@ -13,7 +13,7 @@ skinparam class {
     HeaderBackgroundColor #ECEFF1
 }
 
-title Data Clean Room - Class Diagram (Sprint 2: PR #18 + SCRUM-43 fields)
+title Data Clean Room - Class Diagram (Sprint 3 target: exchange, publication, consent)
 
 ' ==========================================
 ' Core entities
@@ -55,11 +55,27 @@ class Dataset {
     + quality_score: float
     + profile_json: JSON
     + pii_json: JSON
+    + status: string
+    + published_at: datetime
+    + retention_until: date
+    + published_by: int
     + created_at: datetime
     --
     + run_profiling(): List<ColumnProfile>
     + evaluate_quality(rules_path: string): dict
     + detect_pii(): List<PiiFinding>
+}
+
+class DatasetVersion {
+    + id: int
+    + dataset_id: int
+    + kind: string
+    + file_path: string
+    + sha256: string
+    + row_count: int
+    + created_at: datetime
+    --
+    + is_clean(): bool
 }
 
 class QualityRule {
@@ -135,23 +151,35 @@ class LegalBasis {
     + type: string
     + document_ref: string
     + date: date
+    + purpose: string
+    + valid_until: date
+    + revoked_at: datetime
+    + revoked_by: int
     + entered_by: int
     + created_at: datetime
     --
-    + is_valid(): bool
+    + is_active(): bool
 }
 
 class ExchangeRequest {
     + id: int
     + dataset_id: int
+    + dataset_version_id: int
     + requester_id: int
     + reviewer_id: int
     + status: string
     + purpose: string
+    + review_comment: string
+    + requested_at: datetime
+    + reviewed_at: datetime
+    + access_until: datetime
     + created_at: datetime
+    + updated_at: datetime
     --
     + approve(reviewer_id: int): void
     + reject(reviewer_id: int, reason: string): void
+    + revoke(): void
+    + check_access(): bool
 }
 
 class AuditEvent {
@@ -176,10 +204,13 @@ Dataset "1" --- "0..*" LegalBasis : governed by >
 Dataset "1" --- "0..*" QualityRule : has >
 Dataset "1" --- "0..*" RuleViolation : records >
 Dataset "1" --- "0..*" AnonymizationMethod : applies >
+Dataset "1" *-- "1..2" DatasetVersion : versions >
 Dataset "1" *-- "0..*" ColumnProfile : profile_json >
 Dataset "1" *-- "0..*" PiiFinding : pii_json >
 
 ExchangeRequest "*" --- "1" Dataset : targets >
+ExchangeRequest "*" --- "0..1" DatasetVersion : targets clean version >
+User "1" --- "0..*" LegalBasis : enters >
 User "1" --- "*" ExchangeRequest : submits >
 User "0..1" --- "*" ExchangeRequest : reviews >
 User "0..1" --- "*" AuditEvent : performs >
@@ -188,14 +219,26 @@ QualityRule "1" --- "*" RuleViolation : triggers >
 PiiFinding "0..1" --- "0..1" AnonymizationMethod : resolved by >
 
 note bottom of Dataset
-  PR #18 stores profiling and PII as JSON:
+  Sprint 2 stores profiling and PII as JSON:
   profile_json -> ColumnProfile[],
   pii_json -> PiiFinding[].
-  No separate DatasetVersion, ColumnProfile or PiiFinding tables.
+  Sprint 3 adds DatasetVersion (raw + clean);
+  ColumnProfile and PiiFinding remain embedded JSON.
+end note
+
+note right of DatasetVersion
+  Sprint 3: one raw version and one clean version.
+  Only the clean version can be published or downloaded.
 end note
 
 note right of LegalBasis
   id is a UUID stored as String(36).
+  purpose and valid_until define the consent scope;
+  revoked_at / revoked_by record withdrawal.
+end note
+
+note bottom of ExchangeRequest
+  status: pending | approved | rejected | revoked | expired
 end note
 
 legend right
