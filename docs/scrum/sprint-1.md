@@ -81,7 +81,6 @@
 
 На момент закриття спринта всі 15 карток у стовпці Done (To Do: 0, In Progress: 0, In Review: 0). Скриншот дошки зберігається у `docs/scrum/screenshots/`.
 
-![](screenshots/sprint2/scrum_sprint1_all_done.png)
 ![](screenshots/sprint1/scrum_sprint1_tasks_done.png)
 ![](screenshots/sprint1/scrum_sprint1_done.png)
 
