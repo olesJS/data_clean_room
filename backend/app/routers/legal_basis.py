@@ -9,8 +9,12 @@ from sqlalchemy.orm import Session
 from app.audit import log_event
 from app.auth import get_current_user
 from app.database import get_db
-from app.models import Dataset, LegalBasis, User
-from app.schemas.legal_basis import LegalBasisCreate, LegalBasisResponse
+from app.models import Dataset, LegalBasis, User, utc_now
+from app.schemas.legal_basis import (
+    LegalBasisCreate,
+    LegalBasisResponse,
+    LegalBasisRevoke,
+)
 
 router = APIRouter(tags=["legal-basis"])
 
@@ -55,7 +59,7 @@ def _get_visible_dataset(
 def _ensure_allowed_role(
     current_user: User,
     action: str,
-    dataset_id: int,
+    object_ref: str,
     db: Session,
 ) -> None:
     """Reject unsupported roles before any dataset lookup."""
@@ -65,7 +69,7 @@ def _ensure_allowed_role(
     log_event(
         actor=current_user.email,
         action=action,
-        object=f"dataset:{dataset_id}",
+        object=object_ref,
         result="FORBIDDEN",
         db=db,
     )
@@ -93,7 +97,7 @@ def create_legal_basis(
     _ensure_allowed_role(
         current_user,
         action="CREATE_LEGAL_BASIS",
-        dataset_id=dataset_id,
+        object_ref=f"dataset:{dataset_id}",
         db=db,
     )
     _get_visible_dataset(
@@ -108,6 +112,8 @@ def create_legal_basis(
         type=payload.type,
         document_ref=payload.document_ref,
         date=payload.date,
+        purpose=payload.purpose,
+        valid_until=payload.valid_until,
         entered_by=current_user.id,
     )
 
@@ -139,7 +145,7 @@ def get_legal_basis_list(
     _ensure_allowed_role(
         current_user,
         action="GET_LEGAL_BASIS",
-        dataset_id=dataset_id,
+        object_ref=f"dataset:{dataset_id}",
         db=db,
     )
     _get_visible_dataset(
@@ -155,3 +161,90 @@ def get_legal_basis_list(
         .order_by(LegalBasis.created_at.desc())
     )
     return db.scalars(query).all()
+
+
+@router.post(
+    "/legal-basis/{legal_basis_id}/revoke",
+    response_model=LegalBasisResponse,
+    summary="Revoke a legal basis",
+)
+@router.post(
+    "/api/legal-basis/{legal_basis_id}/revoke",
+    response_model=LegalBasisResponse,
+    include_in_schema=False,
+)
+def revoke_legal_basis(
+    legal_basis_id: str,
+    payload: LegalBasisRevoke,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Revoke a legal basis so it can no longer authorise new data access.
+
+    Revocation is irreversible: a revoked record cannot be reactivated. The
+    document reference and free-text reason are deliberately not copied into
+    the audit log to avoid leaking personal or contractual data.
+    """
+    object_ref = f"legal_basis:{legal_basis_id}"
+    _ensure_allowed_role(
+        current_user,
+        action="REVOKE_LEGAL_BASIS",
+        object_ref=object_ref,
+        db=db,
+    )
+
+    legal_basis_entry = db.scalar(
+        select(LegalBasis).where(LegalBasis.id == legal_basis_id)
+    )
+    if legal_basis_entry is None:
+        log_event(
+            actor=current_user.email,
+            action="REVOKE_LEGAL_BASIS",
+            object=object_ref,
+            result="NOT_FOUND",
+            db=db,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Legal basis with id {legal_basis_id} not found",
+        )
+
+    _get_visible_dataset(
+        legal_basis_entry.dataset_id,
+        current_user,
+        action="REVOKE_LEGAL_BASIS",
+        db=db,
+    )
+
+    if legal_basis_entry.revoked_at is not None:
+        log_event(
+            actor=current_user.email,
+            action="REVOKE_LEGAL_BASIS",
+            object=object_ref,
+            result="CONFLICT",
+            db=db,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Legal basis is already revoked",
+        )
+
+    legal_basis_entry.revoked_at = utc_now()
+    legal_basis_entry.revoked_by = current_user.id
+    legal_basis_entry.revoked_reason = payload.reason
+
+    db.commit()
+    db.refresh(legal_basis_entry)
+
+    log_event(
+        actor=current_user.email,
+        action="CONSENT_REVOKED",
+        object=(
+            f"dataset:{legal_basis_entry.dataset_id}:"
+            f"legal_basis:{legal_basis_entry.id}"
+        ),
+        result="SUCCESS",
+        db=db,
+    )
+
+    return legal_basis_entry
