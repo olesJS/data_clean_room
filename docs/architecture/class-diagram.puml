@@ -155,6 +155,7 @@ class LegalBasis {
     + valid_until: date
     + revoked_at: datetime
     + revoked_by: int
+    + revoked_reason: string
     + entered_by: int
     + created_at: datetime
     --
