@@ -142,6 +142,8 @@ Pipeline перевіряє:
 
 - [Діаграма класів архітектури](docs/architecture/class-diagram.puml)
 - [Рендерена діаграма архітектури](docs/architecture/class-diagram.png)
+- [Компонентна діаграма](docs/architecture/component.puml) — [PNG](docs/architecture/component.png)
+- [Діаграма розгортання](docs/architecture/deployment.puml) — [PNG](docs/architecture/deployment.png)
 - [Sprint-документація](docs/scrum)
 - [Змінні середовища](.env.example)
 
