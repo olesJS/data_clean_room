@@ -75,7 +75,7 @@ Consumer -> Frontend: download approved dataset
 Frontend -> API: GET /api/requests/{id}/download
 API -> AuthZ: require role DataConsumer
 AuthZ --> API: allowed
-API -> DB: load request and dataset version
+API -> DB: load request and clean version\nof its dataset
 DB --> API: request (Approved), version (clean)
 API -> LBS: check_legal_basis(dataset, purpose)
 alt consent is valid and version is clean
