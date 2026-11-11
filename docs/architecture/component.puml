@@ -113,7 +113,7 @@ note right of Gate
 end note
 
 note right of Exchange
-  Planned SCRUM-56 (Nazar / DevOps).
+  Planned SCRUM-56 (Nazar / backend).
 end note
 
 @enduml
