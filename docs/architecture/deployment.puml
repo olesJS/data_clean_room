@@ -1,0 +1,79 @@
+@startuml
+!pragma layout smetana
+skinparam roundcorner 8
+skinparam shadowing false
+skinparam defaultFontName "Segoe UI", Arial, sans-serif
+skinparam node {
+    BackgroundColor #F8F9F9
+    BorderColor #95A5A6
+}
+skinparam database {
+    BackgroundColor #ECEFF1
+    BorderColor #2C3E50
+}
+skinparam artifact {
+    BackgroundColor #FFFFFF
+    BorderColor #2C3E50
+}
+skinparam folder {
+    BackgroundColor #FEF9E7
+    BorderColor #B7950B
+}
+skinparam arrowColor #2C3E50
+
+title Data Clean Room - Deployment Diagram (Sprint 3, SCRUM-71)
+
+node "User browser" as Browser {
+    [React SPA]
+}
+
+node "Docker host\n(server / developer laptop)\ndocker default bridge network" as Host {
+
+    node "frontend container\nnginx:1.27-alpine\nport 80:80" as FE {
+        artifact "dist/\nReact production build" as Dist
+        artifact "nginx.conf\nSPA fallback + /api proxy" as NginxConf
+    }
+
+    node "backend container\npython:3.11-slim\nport 8000:8000" as BE {
+        artifact "uvicorn app.main:app\nFastAPI + SQLAlchemy" as Uvicorn
+        folder "/app/data (bind mount, ro)\nYAML rules + PII dictionaries" as DataMount
+        folder "/app/storage/datasets\nno volume: ephemeral" as Uploads
+    }
+
+    node "db container\npostgres:15-alpine\nport 5432:5432" as DB {
+        database "app_db" as AppDB
+        folder "postgres_data\nnamed volume" as PgData
+    }
+}
+
+Browser --> FE : HTTP :80
+FE --> BE : proxy /api/*\nHTTP :8000
+BE --> DB : postgresql://...@db:5432/app_db
+BE --> DataMount
+BE --> Uploads
+DB --> PgData
+
+note bottom of BE
+  Env (actual in compose):
+  DATABASE_URL, SECRET_KEY
+  Planned/needed:
+  JWT_SECRET, HMAC_KEY,
+  POSTGRES_*, STORAGE_DIR,
+  MAX_FILE_SIZE, CORS_ORIGINS
+end note
+
+note bottom of Uploads
+  No named volume in docker-compose.yml.
+  Uploaded raw files live in the container
+  filesystem and are lost when the container
+  is recreated. Fix: add an uploads volume
+  as a SCRUM-71 follow-up.
+end note
+
+note bottom of Host
+  docker compose up --build -d
+  db healthcheck: pg_isready
+  TLS / reverse proxy: planned Sprint 4
+end note
+
+@enduml
