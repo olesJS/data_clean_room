@@ -5,7 +5,9 @@ from pydantic import BaseModel, ConfigDict
 
 from app.schemas.legal_basis import (
     LegalBasisCreate,
+    LegalBasisPurpose,
     LegalBasisResponse,
+    LegalBasisRevoke,
     LegalBasisType,
 )
 
@@ -135,7 +137,9 @@ __all__ = [
     "AuditLogResponse",
     "DatasetResponse",
     "LegalBasisCreate",
+    "LegalBasisPurpose",
     "LegalBasisResponse",
+    "LegalBasisRevoke",
     "LegalBasisType",
     "ColumnHistogram",
     "ColumnProfile",
