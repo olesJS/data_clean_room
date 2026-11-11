@@ -30,21 +30,41 @@ participant AuditLog
 
 autonumber
 
-== Preview and anonymize ==
-Provider -> Frontend: select dataset and retention_until
-Frontend -> API: GET /api/datasets/{id}/publish/check
+== Preview anonymization (read-only) ==
+Provider -> Frontend: select dataset
+Frontend -> API: POST /api/datasets/{id}/anonymize/preview
 API -> AuthZ: require dataset owner (DataProvider)
 AuthZ --> API: allowed
-API -> DB: load dataset, versions, PII and methods
+API -> DB: load dataset and PII findings
 DB --> API: dataset state
 API -> Anonymizer: preview anonymization\n(mask / generalize / hmac)
 Anonymizer -> FileStorage: read raw version
 FileStorage --> Anonymizer: raw file
+Anonymizer --> API: preview clean data and methods
+API --> Frontend: 200 {preview, methods}
+Frontend --> Provider: review anonymization
+
+== Create clean version ==
+Provider -> Frontend: confirm anonymization
+Frontend -> API: POST /api/datasets/{id}/anonymize
+API -> AuthZ: require dataset owner (DataProvider)
+AuthZ --> API: allowed
+API -> Anonymizer: apply anonymization\n(mask / generalize / hmac)
+Anonymizer -> FileStorage: read raw version
+FileStorage --> Anonymizer: raw file
 Anonymizer --> API: clean version and methods
 API -> DB: persist DatasetVersion(kind=clean)\nand AnonymizationMethod[]
+API --> Frontend: 201 Created {version_id}
+Frontend --> Provider: clean version ready
+
+== Publish check (read-only) ==
+Provider -> Frontend: select retention_until
+Frontend -> API: GET /api/datasets/{id}/publish/check
+API -> AuthZ: require dataset owner (DataProvider)
+AuthZ --> API: allowed
 API -> Gate: evaluate(dataset)
 Gate -> DB: check clean version, PII coverage,\nHMAC legal basis and retention
-Gate -> LBS: check_legal_basis(dataset, publication)\nonly if any HMAC method
+Gate -> LBS: check_legal_basis(dataset)\nonly if any HMAC method
 LBS --> Gate: ok or reason
 Gate --> API: GateResult{allowed, reasons, new_class}
 alt allowed
@@ -60,7 +80,7 @@ API -> AuthZ: require dataset owner (DataProvider)
 AuthZ --> API: allowed
 API -> Gate: evaluate(dataset)
 Gate -> DB: re-check clean version, PII coverage,\nHMAC legal basis and retention
-Gate -> LBS: check_legal_basis(dataset, publication)\nonly if any HMAC method
+Gate -> LBS: check_legal_basis(dataset)\nonly if any HMAC method
 LBS --> Gate: ok or reason
 alt allowed
     Gate --> API: new_class
@@ -80,6 +100,12 @@ note over Gate
   pii_not_processed
   hmac_without_legal_basis
   retention_required
+end note
+
+note over Gate, LBS
+  Publication checks any active legal basis (no purpose).
+  Purpose is validated per exchange request (UC-09).
+  Decision recorded in governance 3.5.
 end note
 
 note over DB
