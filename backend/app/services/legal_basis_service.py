@@ -9,7 +9,6 @@ exactly.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date
 from typing import Optional, Union
 
 from sqlalchemy import select
@@ -76,13 +75,7 @@ def check_legal_basis(
     if not entries:
         return LegalBasisCheckResult(False, NO_LEGAL_BASIS)
 
-    today = date.today()
-    active = [
-        entry
-        for entry in entries
-        if entry.revoked_at is None
-        and (entry.valid_until is None or entry.valid_until >= today)
-    ]
+    active = [entry for entry in entries if entry.is_active]
 
     if active:
         if purpose is None:
@@ -97,12 +90,7 @@ def check_legal_basis(
 
     # There is at least one non-revoked record, but none is active, so it is
     # expired. This also covers a mix of revoked and expired records.
-    if any(
-        entry.revoked_at is None
-        and entry.valid_until is not None
-        and entry.valid_until < today
-        for entry in entries
-    ):
+    if any(entry.revoked_at is None and not entry.is_active for entry in entries):
         return LegalBasisCheckResult(False, EXPIRED)
 
     # Defensive fallback: no active record and no explicit expired record.
