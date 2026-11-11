@@ -118,6 +118,70 @@ def test_active_basis_with_wrong_purpose(db_session):
     assert result.reason == PURPOSE_MISMATCH
 
 
+def test_revoked_matching_purpose_wins_over_other_active_basis(db_session):
+    """PO review on PR #30: report the revoked basis for the requested purpose."""
+    dataset = _dataset(db_session)
+    _basis(
+        db_session,
+        dataset.id,
+        purpose=LegalBasisPurpose.ANALYTICS,
+        revoked_at=utc_now(),
+        revoked_by=_provider_id(db_session),
+        revoked_reason="Withdrawn",
+    )
+    _basis(
+        db_session,
+        dataset.id,
+        document_ref="CONTRACT-SERVICE-001",
+        type=LegalBasisType.CONTRACT,
+        purpose=LegalBasisPurpose.REPORTING,
+    )
+
+    result = check_legal_basis(db_session, dataset, purpose="analytics")
+
+    assert result.ok is False
+    assert result.reason == REVOKED
+
+
+def test_expired_matching_purpose_wins_over_other_active_basis(db_session):
+    dataset = _dataset(db_session)
+    _basis(
+        db_session,
+        dataset.id,
+        purpose=LegalBasisPurpose.ANALYTICS,
+        valid_until=date.today() - timedelta(days=1),
+    )
+    _basis(
+        db_session,
+        dataset.id,
+        document_ref="CONTRACT-SERVICE-001",
+        type=LegalBasisType.CONTRACT,
+        purpose=LegalBasisPurpose.REPORTING,
+    )
+
+    result = check_legal_basis(db_session, dataset, purpose="analytics")
+
+    assert result.ok is False
+    assert result.reason == EXPIRED
+
+
+def test_no_matching_purpose_without_active_basis_returns_no_legal_basis(
+    db_session,
+):
+    dataset = _dataset(db_session)
+    _basis(
+        db_session,
+        dataset.id,
+        purpose=LegalBasisPurpose.ANALYTICS,
+        revoked_at=utc_now(),
+    )
+
+    result = check_legal_basis(db_session, dataset, purpose="research")
+
+    assert result.ok is False
+    assert result.reason == NO_LEGAL_BASIS
+
+
 def test_revoked_basis_is_rejected(db_session):
     dataset = _dataset(db_session)
     _basis(

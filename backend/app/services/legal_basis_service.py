@@ -3,7 +3,9 @@
 A legal basis authorises processing only while it is active: it must not be
 revoked and its ``valid_until`` date (when set) must not be in the past. When a
 processing purpose is supplied, at least one active record must match it
-exactly.
+exactly. Reasons are scoped to that purpose: a revoked or expired record for
+the requested purpose is reported before ``purpose_mismatch`` with another
+active basis.
 """
 
 from __future__ import annotations
@@ -49,6 +51,17 @@ def _matches_purpose(entry: LegalBasis, purpose: str) -> bool:
     return _purpose_value(entry.purpose) == purpose.lower()
 
 
+def _inactive_reason(entries: list[LegalBasis]) -> str:
+    """Return the most specific reason for a set of inactive records."""
+    if not entries:
+        return NO_LEGAL_BASIS
+    if all(entry.revoked_at is not None for entry in entries):
+        return REVOKED
+    if any(entry.revoked_at is None and not entry.is_active for entry in entries):
+        return EXPIRED
+    return REVOKED
+
+
 def check_legal_basis(
     db: Session,
     dataset: Union[Dataset, int],
@@ -72,29 +85,29 @@ def check_legal_basis(
         select(LegalBasis).where(LegalBasis.dataset_id == dataset_id)
     ).all()
 
+    if purpose is not None:
+        # Reason priority is scoped to the requested purpose: a revoked or
+        # expired basis for that purpose is more informative than a mismatch
+        # with another active basis (PO review on PR #30).
+        purpose_value = _purpose_value(purpose)
+        matching = [
+            entry for entry in entries if _matches_purpose(entry, purpose_value)
+        ]
+        if any(entry.is_active for entry in matching):
+            return LegalBasisCheckResult(True)
+        if matching:
+            return LegalBasisCheckResult(False, _inactive_reason(matching))
+        if any(entry.is_active for entry in entries):
+            return LegalBasisCheckResult(False, PURPOSE_MISMATCH)
+        return LegalBasisCheckResult(False, NO_LEGAL_BASIS)
+
     if not entries:
         return LegalBasisCheckResult(False, NO_LEGAL_BASIS)
 
-    active = [entry for entry in entries if entry.is_active]
+    if any(entry.is_active for entry in entries):
+        return LegalBasisCheckResult(True)
 
-    if active:
-        if purpose is None:
-            return LegalBasisCheckResult(True)
-        purpose_value = _purpose_value(purpose)
-        if any(_matches_purpose(entry, purpose_value) for entry in active):
-            return LegalBasisCheckResult(True)
-        return LegalBasisCheckResult(False, PURPOSE_MISMATCH)
-
-    if all(entry.revoked_at is not None for entry in entries):
-        return LegalBasisCheckResult(False, REVOKED)
-
-    # There is at least one non-revoked record, but none is active, so it is
-    # expired. This also covers a mix of revoked and expired records.
-    if any(entry.revoked_at is None and not entry.is_active for entry in entries):
-        return LegalBasisCheckResult(False, EXPIRED)
-
-    # Defensive fallback: no active record and no explicit expired record.
-    return LegalBasisCheckResult(False, REVOKED)
+    return LegalBasisCheckResult(False, _inactive_reason(entries))
 
 
 __all__ = [
