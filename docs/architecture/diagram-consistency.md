@@ -24,6 +24,6 @@
 | Причини відмови через згоду | SCRUM-58 | OK | `no_legal_basis`, `revoked`, `expired`, `purpose_mismatch`. |
 | Назви подій аудиту | UC-09 / UC-10 + governance 3.4 | OK / Чернетка | `REQUEST`, `REQUEST_APPROVED`, `REQUEST_REJECTED`, `DOWNLOAD`, `DENY`; governance 3.4 доповнити разом із SCRUM-58. |
 | Поля класів і кратності | `backend/app/models.py` + міграції SCRUM-55/57/58 | Чернетка | `DatasetVersion`, поля публікації та згоди — цільовий стан Спринту 3; перевірити після merge. |
-| Назви ендпоінтів | raw-критерії SCRUM-57 | OK | `POST /api/datasets/{id}/anonymize/preview`, `POST /api/datasets/{id}/anonymize`, `GET /api/datasets/{id}/publish/check`, `POST /api/datasets/{id}/publish`, `POST /api/legal-basis/{id}/revoke`. |
-| `GET /publish/check` не змінює стан | REST + SCRUM-55/57 | OK | Лише читання; створення clean-версії — окремий `POST /anonymize`. |
+| Назви ендпоінтів | raw-критерії SCRUM-57 | OK | `POST /api/datasets/{id}/anonymize/preview`, `POST /api/datasets/{id}/anonymize`, `GET /api/datasets/{id}/publish/check?retention_until=YYYY-MM-DD`, `POST /api/datasets/{id}/publish`, `POST /api/legal-basis/{id}/revoke`. |
+| `GET /publish/check` не змінює стан | REST + SCRUM-55/57 | OK | Лише читання; `retention_until` передається параметром, бо до публікації поле набору ще порожнє; створення clean-версії — окремий `POST /anonymize`. |
 | Місце exchange flow у проєкті | SCRUM-56 (Назар, backend) | OK | Flow не видалено; `sequence-exchange.puml` — контракт для SCRUM-56, а не дублювання реалізації. |
