@@ -151,8 +151,66 @@ def test_owner_can_revoke_and_audit_has_no_document_ref(
     assert audit_record.result == "SUCCESS"
     assert f"dataset:{dataset_id}" in audit_record.object
     assert f"legal_basis:{legal_basis['id']}" in audit_record.object
+    assert "type:consent" in audit_record.object
     assert "CONSENT-2026-REVOKE-001" not in audit_record.object
     assert "Data subject withdrew consent" not in audit_record.object
+
+
+def test_create_and_list_legal_basis_via_api_aliases(
+    client, provider_token, db_session
+):
+    """nginx proxies /api/* without stripping the prefix (SCRUM-62)."""
+    dataset_id = create_sample_dataset(db_session)
+    headers = {"Authorization": f"Bearer {provider_token}"}
+    payload = {
+        "type": "consent",
+        "document_ref": "CONSENT-API-ALIAS",
+        "date": "2026-10-24",
+        "purpose": "analytics",
+        "valid_until": FUTURE_DATE,
+    }
+
+    created = client.post(
+        f"/api/datasets/{dataset_id}/legal-basis",
+        json=payload,
+        headers=headers,
+    )
+    assert created.status_code == 201, created.text
+    assert created.json()["document_ref"] == "CONSENT-API-ALIAS"
+
+    listed = client.get(
+        f"/api/datasets/{dataset_id}/legal-basis",
+        headers=headers,
+    )
+    assert listed.status_code == 200, listed.text
+    entries = listed.json()
+    assert len(entries) == 1
+    assert entries[0]["id"] == created.json()["id"]
+    assert entries[0]["purpose"] == "analytics"
+
+
+def test_unknown_and_foreign_revoke_share_404_detail(
+    client, provider_token, db_session
+):
+    """PO decision 8: the response must not reveal that a basis exists."""
+    dataset_id = create_sample_dataset(db_session)
+    legal_basis = create_legal_basis(client, provider_token, dataset_id)
+    other_token = create_other_provider_token(client, db_session)
+
+    foreign = client.post(
+        f"/legal-basis/{legal_basis['id']}/revoke",
+        json={"reason": "Foreign provider"},
+        headers={"Authorization": f"Bearer {other_token}"},
+    )
+    unknown = client.post(
+        "/legal-basis/00000000-0000-0000-0000-000000000000/revoke",
+        json={"reason": "Unknown"},
+        headers={"Authorization": f"Bearer {provider_token}"},
+    )
+
+    assert foreign.status_code == 404
+    assert unknown.status_code == 404
+    assert foreign.json() == unknown.json() == {"detail": "Legal basis not found"}
 
 
 def test_steward_can_revoke_via_api_alias(

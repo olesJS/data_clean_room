@@ -26,6 +26,7 @@ def _get_visible_dataset(
     current_user: User,
     action: str,
     db: Session,
+    not_found_detail: str | None = None,
 ) -> Dataset:
     """Return a dataset the current user may access, or raise 404.
 
@@ -50,7 +51,7 @@ def _get_visible_dataset(
         )
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Dataset with id {dataset_id} not found",
+            detail=not_found_detail or f"Dataset with id {dataset_id} not found",
         )
 
     return dataset
@@ -87,6 +88,12 @@ def _ensure_allowed_role(
     response_model=LegalBasisResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Register a legal basis for a dataset",
+)
+@router.post(
+    "/api/datasets/{dataset_id}/legal-basis",
+    response_model=LegalBasisResponse,
+    status_code=status.HTTP_201_CREATED,
+    include_in_schema=False,
 )
 def create_legal_basis(
     dataset_id: int,
@@ -136,6 +143,11 @@ def create_legal_basis(
     "/datasets/{dataset_id}/legal-basis",
     response_model=List[LegalBasisResponse],
     summary="List all legal basis records for a dataset",
+)
+@router.get(
+    "/api/datasets/{dataset_id}/legal-basis",
+    response_model=List[LegalBasisResponse],
+    include_in_schema=False,
 )
 def get_legal_basis_list(
     dataset_id: int,
@@ -206,7 +218,7 @@ def revoke_legal_basis(
         )
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Legal basis with id {legal_basis_id} not found",
+            detail="Legal basis not found",
         )
 
     _get_visible_dataset(
@@ -214,6 +226,7 @@ def revoke_legal_basis(
         current_user,
         action="REVOKE_LEGAL_BASIS",
         db=db,
+        not_found_detail="Legal basis not found",
     )
 
     if legal_basis_entry.revoked_at is not None:
@@ -236,12 +249,14 @@ def revoke_legal_basis(
     db.commit()
     db.refresh(legal_basis_entry)
 
+    basis_type = getattr(legal_basis_entry.type, "value", legal_basis_entry.type)
     log_event(
         actor=current_user.email,
         action="CONSENT_REVOKED",
         object=(
             f"dataset:{legal_basis_entry.dataset_id}:"
-            f"legal_basis:{legal_basis_entry.id}"
+            f"legal_basis:{legal_basis_entry.id}:"
+            f"type:{basis_type}"
         ),
         result="SUCCESS",
         db=db,
