@@ -59,7 +59,7 @@ Frontend --> Provider: clean version ready
 
 == Publish check (read-only) ==
 Provider -> Frontend: select retention_until
-Frontend -> API: GET /api/datasets/{id}/publish/check
+Frontend -> API: GET /api/datasets/{id}/publish/check\n?retention_until=YYYY-MM-DD
 API -> AuthZ: require dataset owner (DataProvider)
 AuthZ --> API: allowed
 API -> Gate: evaluate(dataset)
