@@ -73,6 +73,7 @@ class DatasetVersion {
     + file_path: string
     + sha256: string
     + row_count: int
+    + created_by: int
     + created_at: datetime
     --
     + is_clean(): bool
@@ -165,9 +166,8 @@ class LegalBasis {
 class ExchangeRequest {
     + id: int
     + dataset_id: int
-    + dataset_version_id: int
-    + requester_id: int
-    + reviewer_id: int
+    + consumer_id: int
+    + reviewed_by: int
     + status: string
     + purpose: string
     + review_comment: string
@@ -177,9 +177,8 @@ class ExchangeRequest {
     + created_at: datetime
     + updated_at: datetime
     --
-    + approve(reviewer_id: int): void
-    + reject(reviewer_id: int, reason: string): void
-    + revoke(): void
+    + approve(reviewed_by: int): void
+    + reject(reviewed_by: int, reason: string): void
     + check_access(): bool
 }
 
@@ -210,9 +209,8 @@ Dataset "1" *-- "0..*" ColumnProfile : profile_json >
 Dataset "1" *-- "0..*" PiiFinding : pii_json >
 
 ExchangeRequest "*" --- "1" Dataset : targets >
-ExchangeRequest "*" --- "0..1" DatasetVersion : targets clean version >
 User "1" --- "0..*" LegalBasis : enters >
-User "1" --- "*" ExchangeRequest : submits >
+User "1" --- "*" ExchangeRequest : requests >
 User "0..1" --- "*" ExchangeRequest : reviews >
 User "0..1" --- "*" AuditEvent : performs >
 
@@ -239,7 +237,9 @@ note right of LegalBasis
 end note
 
 note bottom of ExchangeRequest
-  status: pending | approved | rejected | revoked | expired
+  status: Requested | Approved | Rejected | Downloaded | Expired.
+  consumer_id / reviewed_by align with SCRUM-56;
+  access_until / Expired follow UC-09 EX3.
 end note
 
 legend right
