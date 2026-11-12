@@ -448,5 +448,6 @@ def test_hardcore_audit_trail_invariants(steward_token, client, db_session):
             "FAILURE",
             "FORBIDDEN",
             "UNAUTHORIZED",
+            "DENY",
         )
         assert entry["timestamp"] is not None

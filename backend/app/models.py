@@ -2,7 +2,17 @@ import enum
 import uuid
 from datetime import date, datetime, timezone
 
-from sqlalchemy import JSON, Column, Date, DateTime, Float, ForeignKey, Integer, String
+from sqlalchemy import (
+    JSON,
+    Column,
+    Date,
+    DateTime,
+    Float,
+    ForeignKey,
+    Integer,
+    String,
+    UniqueConstraint,
+)
 from sqlalchemy import Enum as SQLEnum
 from sqlalchemy.orm import relationship
 
@@ -52,6 +62,83 @@ class Dataset(Base):
     quality_score = Column(Float, nullable=True)
     profile_json = Column(JSON, nullable=True)
     pii_json = Column(JSON, nullable=True)
+    # Sprint 3 publication fields (SCRUM-57)
+    status = Column(String(20), nullable=False, default="uploaded")
+    published_at = Column(DateTime, nullable=True)
+    published_by = Column(String(255), nullable=True)
+    retention_until = Column(Date, nullable=True)
+
+
+class DatasetVersion(Base):
+    """Immutable snapshot of a dataset file (raw or anonymised clean copy)."""
+
+    __tablename__ = "dataset_versions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    dataset_id = Column(
+        Integer,
+        ForeignKey("datasets.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    kind = Column(String(10), nullable=False)  # raw | clean
+    version_number = Column(Integer, nullable=False, default=1)
+    file_path = Column(String(500), nullable=False)
+    file_name = Column(String(255), nullable=False)
+    file_type = Column(String(20), nullable=False)
+    file_size = Column(Integer, nullable=False, default=0)
+    row_count = Column(Integer, nullable=False, default=0)
+    sha256 = Column(String(64), nullable=False)
+    columns = Column(JSON, nullable=True)
+    data_class = Column(String(50), nullable=True)
+    created_by = Column(String(255), nullable=False)
+    created_at = Column(DateTime, default=utc_now, nullable=False)
+
+    dataset = relationship("Dataset", backref="versions")
+
+    __table_args__ = (
+        UniqueConstraint(
+            "dataset_id",
+            "kind",
+            "version_number",
+            name="uq_dataset_version_kind_number",
+        ),
+    )
+
+
+class AnonymizationMethod(Base):
+    """Anonymisation method applied to one PII column (SCRUM-55/57)."""
+
+    __tablename__ = "anonymization_methods"
+
+    id = Column(Integer, primary_key=True, index=True)
+    dataset_id = Column(
+        Integer,
+        ForeignKey("datasets.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    dataset_version_id = Column(
+        Integer,
+        ForeignKey("dataset_versions.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    column_name = Column(String(255), nullable=False)
+    method = Column(String(20), nullable=False)  # mask | generalize | hmac | redact
+    params = Column(JSON, nullable=True)
+    created_by = Column(String(255), nullable=False)
+    created_at = Column(DateTime, default=utc_now, nullable=False)
+
+    dataset = relationship("Dataset", backref="anonymization_methods")
+    dataset_version = relationship("DatasetVersion", backref="anonymization_methods")
+
+    __table_args__ = (
+        UniqueConstraint(
+            "dataset_id",
+            "column_name",
+            name="uq_anonymization_dataset_column",
+        ),
+    )
 
 
 class LegalBasisType(str, enum.Enum):
@@ -133,12 +220,81 @@ class LegalBasis(Base):
         return True
 
 
+class ExchangeRequestStatus(str, enum.Enum):
+    REQUESTED = "Requested"
+    APPROVED = "Approved"
+    REJECTED = "Rejected"
+    DOWNLOADED = "Downloaded"
+    EXPIRED = "Expired"
+
+
+class ExchangeRequest(Base):
+    """Consumer request to access the clean version of a published dataset."""
+
+    __tablename__ = "exchange_requests"
+
+    id = Column(Integer, primary_key=True, index=True)
+    dataset_id = Column(
+        Integer,
+        ForeignKey("datasets.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    dataset_version_id = Column(
+        Integer,
+        ForeignKey("dataset_versions.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    requester_id = Column(
+        Integer,
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    reviewer_id = Column(
+        Integer,
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    status = Column(
+        String(20),
+        nullable=False,
+        default=ExchangeRequestStatus.REQUESTED.value,
+        index=True,
+    )
+    purpose = Column(String(30), nullable=False)
+    requested_at = Column(DateTime, default=utc_now, nullable=False)
+    decided_at = Column(DateTime, nullable=True)
+    review_comment = Column(String(500), nullable=True)
+    access_until = Column(Date, nullable=True)
+    downloaded_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=utc_now, nullable=False)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now, nullable=False)
+
+    dataset = relationship("Dataset", backref="exchange_requests")
+    dataset_version = relationship("DatasetVersion", backref="exchange_requests")
+    requester = relationship(
+        "User",
+        foreign_keys=[requester_id],
+        backref="exchange_requests",
+    )
+    reviewer = relationship(
+        "User",
+        foreign_keys=[reviewer_id],
+        backref="reviewed_exchange_requests",
+    )
+
+
 __all__ = [
+    "AnonymizationMethod",
     "Base",
-    "User",
-    "AuditLog",
     "Dataset",
+    "DatasetVersion",
+    "ExchangeRequest",
+    "ExchangeRequestStatus",
     "LegalBasis",
     "LegalBasisPurpose",
     "LegalBasisType",
+    "User",
+    "AuditLog",
 ]

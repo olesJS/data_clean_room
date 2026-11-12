@@ -27,9 +27,13 @@ services:
       - "8000:8000"
     volumes:
       - ./data:/app/data:ro
+      - uploads_data:/app/storage
     environment:
       - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres_password}@db:5432/${POSTGRES_DB:-app_db}
       - SECRET_KEY=${SECRET_KEY:-default_secret}
+      - ENV=${ENV:-development}
+      - HMAC_KEY=${HMAC_KEY:-dev_hmac_key_change_me}
+      - STORAGE_DIR=/app/storage/datasets
     depends_on:
       db:
         condition: service_healthy
@@ -47,3 +51,4 @@ services:
 
 volumes:
   postgres_data:
+  uploads_data:

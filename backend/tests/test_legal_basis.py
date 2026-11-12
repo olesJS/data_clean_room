@@ -87,7 +87,11 @@ def test_create_and_get_legal_basis_success(
 
     audit_record = (
         db_session.query(AuditLog)
-        .filter(AuditLog.action == "CREATE_LEGAL_BASIS")
+        .filter(
+            AuditLog.action == "CREATE_LEGAL_BASIS",
+            AuditLog.object.like(f"dataset:{dataset_id}:%"),
+        )
+        .order_by(AuditLog.id.desc())
         .first()
     )
     assert audit_record is not None

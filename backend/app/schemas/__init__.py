@@ -3,6 +3,12 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, ConfigDict
 
+from app.schemas.exchange import (
+    ExchangeDecision,
+    ExchangeReject,
+    ExchangeRequestCreate,
+    ExchangeRequestResponse,
+)
 from app.schemas.legal_basis import (
     LegalBasisCreate,
     LegalBasisPurpose,
@@ -10,6 +16,7 @@ from app.schemas.legal_basis import (
     LegalBasisRevoke,
     LegalBasisType,
 )
+from app.schemas.publication import AnonymizeRequest, PublishRequest
 
 
 class LoginRequest(BaseModel):
@@ -54,6 +61,10 @@ class DatasetResponse(BaseModel):
     created_at: datetime
     data_class: Optional[str] = None
     quality_score: Optional[float] = None
+    status: Optional[str] = None
+    published_at: Optional[datetime] = None
+    published_by: Optional[str] = None
+    retention_until: Optional[Any] = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -136,6 +147,12 @@ __all__ = [
     "UserResponse",
     "AuditLogResponse",
     "DatasetResponse",
+    "AnonymizeRequest",
+    "PublishRequest",
+    "ExchangeDecision",
+    "ExchangeReject",
+    "ExchangeRequestCreate",
+    "ExchangeRequestResponse",
     "LegalBasisCreate",
     "LegalBasisPurpose",
     "LegalBasisResponse",

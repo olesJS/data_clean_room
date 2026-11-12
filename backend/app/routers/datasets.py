@@ -312,6 +312,14 @@ def list_datasets(
             .order_by(Dataset.created_at.desc())
             .all()
         )
+    elif current_user.role == "DataConsumer":
+        # SCRUM-52: raw (unpublished) datasets must not be discoverable.
+        datasets = (
+            db.query(Dataset)
+            .filter(Dataset.status == "published")
+            .order_by(Dataset.created_at.desc())
+            .all()
+        )
     else:
         datasets = db.query(Dataset).order_by(Dataset.created_at.desc()).all()
 
