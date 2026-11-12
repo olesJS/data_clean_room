@@ -1,0 +1,67 @@
+@startuml
+!pragma layout smetana
+skinparam monochrome false
+skinparam roundcorner 8
+skinparam shadowing false
+skinparam defaultFontName "Segoe UI", Arial, sans-serif
+skinparam sequence {
+    ArrowColor #2C3E50
+    ActorBorderColor #2C3E50
+    LifeLineBorderColor #90A4AE
+    ParticipantBackgroundColor #ECEFF1
+    ParticipantBorderColor #2C3E50
+}
+
+title Data Clean Room - Publication flow (Sprint 3)
+
+actor "DataProvider" as DP
+participant "Frontend\nPublicationPage" as FE
+participant "Publication API" as API
+participant "Anonymizer" as ANON
+participant "Publication Gate" as GATE
+database "PostgreSQL" as DB
+participant "Audit" as AUDIT
+
+DP -> FE : Open dataset / publish
+FE -> API : POST /datasets/{id}/anonymize/preview
+API -> ANON : preview_anonymization()
+ANON --> API : methods, expected class, counts
+API --> FE : preview (no file, no version)
+
+DP -> FE : Apply anonymisation
+FE -> API : POST /datasets/{id}/anonymize
+API -> ANON : apply_anonymization()
+ANON -> DB : create DatasetVersion(kind=clean)
+ANON -> DB : upsert AnonymizationMethod rows
+ANON --> API : clean version vN + sha256
+API -> AUDIT : ANONYMIZE (SUCCESS)
+API --> FE : version metadata
+
+DP -> FE : Publish
+FE -> API : GET /datasets/{id}/publish/check?retention_until=...
+API -> GATE : evaluate()
+GATE -> DB : dataset, PII, clean version, legal bases
+GATE --> API : allowed + reasons / new_class
+API --> FE : gate result (read-only)
+
+DP -> FE : Confirm publication
+FE -> API : POST /datasets/{id}/publish
+API -> GATE : evaluate()
+alt Gate failed
+    GATE --> API : allowed=false, reason_codes
+    API -> AUDIT : DENY (publish reasons)
+    API --> FE : 422 + reason_codes
+else Gate passed
+    API -> DB : dataset.status=published,\npublished_at/by, retention_until
+    API -> AUDIT : PUBLISH (SUCCESS)
+    API --> FE : published dataset + gate
+end
+
+note over GATE
+  Reason codes:
+  no_clean_version, pii_not_processed,
+  hmac_without_legal_basis,
+  retention_required
+end note
+
+@enduml

@@ -1,0 +1,80 @@
+@startuml
+!pragma layout smetana
+skinparam monochrome false
+skinparam roundcorner 8
+skinparam shadowing false
+skinparam defaultFontName "Segoe UI", Arial, sans-serif
+skinparam sequence {
+    ArrowColor #2C3E50
+    ActorBorderColor #2C3E50
+    LifeLineBorderColor #90A4AE
+    ParticipantBackgroundColor #ECEFF1
+    ParticipantBorderColor #2C3E50
+}
+
+title Data Clean Room - Exchange flow (Sprint 3)
+
+actor "DataConsumer" as DC
+actor "DataProvider" as DP
+participant "Frontend\nCatalog / Requests" as FE
+participant "Exchange API" as API
+participant "Exchange Service" as SVC
+participant "Legal Basis" as LEGAL
+database "PostgreSQL" as DB
+participant "Audit" as AUDIT
+
+DC -> FE : Browse catalog
+FE -> API : GET /datasets (published only)
+API --> FE : published datasets
+
+DC -> FE : Request access
+FE -> API : POST /exchange-requests
+API -> SVC : create_request()
+SVC -> DB : insert ExchangeRequest(Requested)
+SVC -> AUDIT : REQUEST (SUCCESS)
+API --> FE : 201 request
+
+DP -> FE : Open access requests
+FE -> API : GET /exchange-requests (owning provider)
+API -> SVC : list_requests()
+SVC --> API : requests for own datasets
+API --> FE : list
+
+alt Approve
+    DP -> FE : Approve (access_until)
+    FE -> API : POST /exchange-requests/{id}/approve
+    API -> SVC : approve_request()
+    SVC -> DB : status=Approved, reviewer, access_until
+    SVC -> AUDIT : REQUEST_APPROVED
+    API --> FE : approved request
+else Reject
+    DP -> FE : Reject with reason
+    FE -> API : POST /exchange-requests/{id}/reject
+    API -> SVC : reject_request()
+    SVC -> DB : status=Rejected, review_comment
+    SVC -> AUDIT : REQUEST_REJECTED
+    API --> FE : rejected request
+end
+
+DC -> FE : Download clean dataset
+FE -> API : GET /exchange-requests/{id}/download
+API -> SVC : prepare_download()
+SVC -> DB : load request + clean DatasetVersion
+SVC -> LEGAL : check purpose + active legal basis
+alt Not approved / expired / no legal basis
+    SVC -> AUDIT : DENY (reason)
+    API --> FE : 403 / 409 / 422
+else Allowed
+    SVC -> DB : status=Downloaded, downloaded_at
+    SVC -> AUDIT : DOWNLOAD (SUCCESS)
+    API --> FE : file stream (clean version)
+end
+
+note over SVC
+  Statuses: Requested -> Approved |
+  Rejected | Downloaded | Expired.
+  Purpose is checked on exchange,
+  not on publication.
+end note
+
+@enduml

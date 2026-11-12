@@ -9,10 +9,11 @@
 | `GET /`, `GET /health`, `GET /health/db` | 200 | 200 | 200 | 200 |
 | `GET /api/auth/me` | 401 | 200 | 200 | 200 |
 | `POST /datasets`, `POST /api/datasets` | 401 | 201 | 403 | 403 |
-| `GET /datasets`, `GET /api/datasets` | 401 | 200 (лише власні) | 200 ⚠ | 200 |
+| `GET /datasets`, `GET /api/datasets` | 401 | 200 (лише власні) | 200 (лише опубліковані) | 200 |
 | `GET /audit`, `GET /api/audit` | 401 | 403 | 403 | 200 |
+| `GET /catalog`, `GET /api/catalog` | 401 | 403 | 200 (лише опубліковані) | 200 |
 
-⚠ Відомий дефект **SCRUM-52**: Data Consumer отримує в списку всі завантажені (неопубліковані) набори. За матрицею 3.2 сирий набір Consumer заборонено, решта доступна лише Public або після схвалення запиту. Тест `test_consumer_does_not_see_unpublished_datasets` позначено `xfail(strict=True)`: після виправлення він почне проходити, і `xfail` треба буде зняти в межах SCRUM-52.
+**SCRUM-52 виправлено (Sprint 3):** Data Consumer більше не бачить сирі (неопубліковані) набори через `GET /datasets`. Для пошуку опублікованих наборів використовується каталог `GET /catalog`. Тест `test_consumer_does_not_see_unpublished_datasets` проходить без `xfail`.
 
 ## Що перевіряють тести
 

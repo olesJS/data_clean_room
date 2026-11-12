@@ -47,6 +47,14 @@
 
 **Принцип мінімальних привілеїв:** Data Steward бачить метадані та журнал аудиту, але не вміст наборів. Сирий файл (`Personal`) ніколи не доступний Consumer, навіть після схвалення запиту.
 
+**Уточнення Sprint 3 (фактична реалізація):**
+
+- Consumer бачить у `GET /datasets` лише набори зі статусом `published`; пошук опублікованих наборів виконується через `GET /catalog` (метадані без сирих даних).
+- Запит на доступ створює лише `DataConsumer` і лише до опублікованого набору з clean-версією. Статуси запиту: `Requested → Approved | Rejected`, `Approved → Downloaded | Expired` (за `access_until`).
+- Рішення `approve`/`reject` ухвалює **лише власник набору** (`Dataset.uploaded_by`). Data Steward бачить усі запити, але не може їх схвалювати, відхиляти чи завантажувати чужі файли. Чужий Data Provider отримує `404`, а не `403`, щоб не розкривати існування запиту.
+- Завантаження віддає **лише clean-версію** через `GET /exchange-requests/{id}/download`. Сирий файл не має жодного маршруту для Consumer.
+- Мета обробки перевіряється під час створення запиту, схвалення та завантаження, а не під час публікації: потрібна активна правова підстава з точно такою ж метою.
+
 ### 3.3. Реєстр правової підстави (`legal_basis`)
 
 | Поле | Тип | Опис |
@@ -74,6 +82,8 @@
 - Уже передані дані не відкликаються, але факт відкликання фіксується в аудиті (`CONSENT_REVOKED`; тип підстави записується в `object`); нові схвалення запитів і завантаження clean-версії блокуються.
 - `document_ref` і `revoked_reason` не копіюються в журнал аудиту, щоб не розкривати персональні чи договірні дані.
 
+**API та перевірки:** `POST/GET /api/datasets/{id}/legal-basis`, `POST /api/legal-basis/{id}/revoke`. Перевірка `check_legal_basis(db, dataset, purpose)` повертає `no_legal_basis`, `revoked`, `expired` або `purpose_mismatch`; причини scoped до запитаної мети (відкликана підстава для цієї мети повідомляється раніше за `purpose_mismatch` з іншою метою). Відмова під час exchange записується як `DENY` з `legal_basis_invalid:<reason>` в `object`.
+
 ### 3.4. Формат запису аудиту (`audit_log`)
 
 | Поле | Тип | Опис |
@@ -81,37 +91,53 @@
 | `id` | `bigserial` | Первинний ключ (PK) |
 | `actor` | `FK users` | **Хто** здійснив дію |
 | `timestamp` | `timestamptz` | **Коли** (UTC) |
-| `action` | `enum` | **Дія:** `LOGIN`, `UPLOAD`, `PUBLISH`, `REQUEST`, `REQUEST_APPROVED`, `REQUEST_REJECTED`, `DOWNLOAD`, `DENY`, `EXPIRE`, `DELETE`, `CONSENT_REVOKED` |
-| `object` | `text` | **Об’єкт:** наприклад, `dataset:42`, `request:7`, `user:3` |
-| `result` | `enum` | **Результат:** `success`, `denied` або `failed` |
-| `details` | `jsonb` | Додаткові дані: причина відмови, застосовані методи тощо |
+| `action` | `enum` | **Дія:** `LOGIN`, `UPLOAD_DATASET`, `LIST_DATASETS`, `GET_AUDIT`, `CREATE_LEGAL_BASIS`, `GET_LEGAL_BASIS`, `CONSENT_REVOKED`, `ANONYMIZE`, `PUBLISH_CHECK`, `PUBLISH`, `LIST_CATALOG`, `REQUEST`, `REQUEST_APPROVED`, `REQUEST_REJECTED`, `DOWNLOAD`, `DENY`, `DELETE` |
+| `object` | `text` | **Об’єкт:** наприклад, `dataset:42`, `request:7:purpose:analytics`, `legal_basis:<uuid>:type:consent` |
+| `result` | `enum` | **Результат:** `SUCCESS`, `DENY`, `FORBIDDEN`, `UNAUTHORIZED`, `NOT_FOUND`, `CONFLICT`, `INVALID`, `FAILURE` |
+| `details` | — | У поточній схемі окремого поля немає: причина відмови кодується в `object`, наприклад `dataset:42:publish:reasons:no_clean_version,pii_not_processed` |
 
 Приклад запису про відмову:
 
 ```json
 {
-  "actor": "user_consumer_5",
+  "actor": "consumer@example.com",
   "timestamp": "2026-12-15T14:22:31Z",
-  "action": "DOWNLOAD",
-  "object": "dataset_version:17",
-  "result": "denied",
-  "details": {
-    "reason": "raw file requires Provider role",
-    "class": "Personal"
-  }
+  "action": "DENY",
+  "object": "request:17:dataset:42:purpose:analytics:reason:legal_basis_invalid:revoked",
+  "result": "DENY"
 }
 ```
+
+Події аудиту не містять значень PII, `document_ref`, причин відкликання або вмісту файлів — лише ідентифікатори, мету, клас і стабільні коди причин.
 
 ### 3.5. Ворота публікації (publish gate)
 
 Набір можна опублікувати лише за виконання всіх чотирьох умов:
 
-1. Профілювання виконано, правила якості застосовано, порушення оброблено відповідно до дії правила (`reject`, `flag` або `block`).
-2. Для кожної PII-колонки застосовано метод анонімізації; якщо серед методів є HMAC, для набору зафіксовано чинну правову підставу.
-3. Задано термін зберігання (retention).
-4. Подію `PUBLISH` записано в журнал аудиту.
+1. Існує clean-версія (`DatasetVersion.kind = "clean"`), створена анонімізацією.
+2. Для кожної активної PII-колонки застосовано метод анонімізації (`mask`, `generalize`, `hmac` або `redact`). PII-колонки з `user_confirmed = false` не вважаються активними.
+3. Якщо серед методів є HMAC, для набору зафіксовано чинну правову підставу. HMAC — псевдонімізація, тому клас лишається `Personal`.
+4. Задано `retention_until` не раніше поточної дати.
 
-Якщо хоча б одну умову не виконано, публікація блокується з поясненням причини, а спроба записується в аудит із результатом `denied`.
+Причини блокування (стабільні коди; у дужках — короткий alias для UI):
+
+| Код | Alias | Коли виникає |
+|---|---|---|
+| `no_clean_version` | `no_clean` | Clean-версії ще немає |
+| `pii_not_processed` | `pii_not_processed` | Для частини PII-колонок немає методу; у `columns` — перелік |
+| `hmac_without_legal_basis` | `hmac_no_basis` | Є HMAC-колонки, але немає чинної підстави; у `columns` — перелік |
+| `retention_required` | `retention_req` | `retention_until` відсутній або в минулому |
+
+**Клас після публікації:** немає PII → `Internal`; усі PII замасковано/узагальнено/видалено → `Confidential`; є хоча б одна HMAC-колонка → `Personal`.
+
+**Контракт API:**
+
+- `POST /api/datasets/{id}/anonymize/preview` — лише попередній перегляд, **нічого не записує**;
+- `POST /api/datasets/{id}/anonymize` — створює нову незмінну clean-версію та записи `AnonymizationMethod`;
+- `GET /api/datasets/{id}/publish/check?retention_until=YYYY-MM-DD` — **read-only** перевірка, приймає retention;
+- `POST /api/datasets/{id}/publish` з `{retention_until}` — `200` з новим класом або `422` з top-level JSON `{allowed, reasons, new_class, hmac_columns, missing_columns, clean_version_id}`.
+
+Якщо хоча б одну умову не виконано, публікація блокується з поясненням причини, а спроба записується в аудит як `DENY` з переліком `reasons`. Успішна публікація записує `PUBLISH` з класом і retention.
 
 
 ### 3.6. Політика видалення сирих даних (Raw Data Retention)

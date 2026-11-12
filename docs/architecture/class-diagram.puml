@@ -13,7 +13,7 @@ skinparam class {
     HeaderBackgroundColor #ECEFF1
 }
 
-title Data Clean Room - Class Diagram (Sprint 2: PR #18 + SCRUM-43 fields)
+title Data Clean Room - Class Diagram (Sprint 3: publication + exchange)
 
 ' ==========================================
 ' Core entities
@@ -27,6 +27,13 @@ class User {
     --
     + login(): bool
     + request_access(dataset_id: int): ExchangeRequest
+}
+
+class Role {
+    + id: int
+    + name: string
+    + description: string
+    + created_at: datetime
 }
 
 class Policy {
@@ -55,11 +62,34 @@ class Dataset {
     + quality_score: float
     + profile_json: JSON
     + pii_json: JSON
+    + status: string
+    + published_at: datetime
+    + published_by: string
+    + retention_until: date
     + created_at: datetime
     --
     + run_profiling(): List<ColumnProfile>
     + evaluate_quality(rules_path: string): dict
     + detect_pii(): List<PiiFinding>
+}
+
+class DatasetVersion {
+    + id: int
+    + dataset_id: int
+    + kind: string
+    + version_number: int
+    + file_path: string
+    + file_name: string
+    + file_type: string
+    + file_size: int
+    + row_count: int
+    + sha256: string
+    + columns: JSON
+    + data_class: string
+    + created_by: string
+    + created_at: datetime
+    --
+    + is_clean(): bool
 }
 
 class QualityRule {
@@ -120,10 +150,11 @@ class PiiFinding <<JSON>> {
 class AnonymizationMethod {
     + id: int
     + dataset_id: int
-    + pii_finding_ref: string
-    + method_type: string
-    + parameters: dict
-    + is_applied: bool
+    + dataset_version_id: int
+    + column_name: string
+    + method: string
+    + params: dict
+    + created_by: string
     + created_at: datetime
     --
     + execute(series: Series): Series
@@ -135,22 +166,34 @@ class LegalBasis {
     + type: string
     + document_ref: string
     + date: date
+    + purpose: string
+    + valid_until: date
     + entered_by: int
+    + revoked_at: datetime
+    + revoked_by: int
+    + revoked_reason: string
     + created_at: datetime
     --
-    + is_valid(): bool
+    + is_active(): bool
 }
 
 class ExchangeRequest {
     + id: int
     + dataset_id: int
+    + dataset_version_id: int
     + requester_id: int
     + reviewer_id: int
     + status: string
     + purpose: string
+    + requested_at: datetime
+    + decided_at: datetime
+    + review_comment: string
+    + access_until: date
+    + downloaded_at: datetime
     + created_at: datetime
+    + updated_at: datetime
     --
-    + approve(reviewer_id: int): void
+    + approve(reviewer_id: int, access_until: date): void
     + reject(reviewer_id: int, reason: string): void
 }
 
@@ -170,16 +213,19 @@ class AuditEvent {
 ' ==========================================
 
 User "1" --- "0..*" Dataset : owns >
+User "*" --- "1" Role : assigned >
 Policy "1" --- "*" Dataset : applies to >
 
 Dataset "1" --- "0..*" LegalBasis : governed by >
 Dataset "1" --- "0..*" QualityRule : has >
 Dataset "1" --- "0..*" RuleViolation : records >
-Dataset "1" --- "0..*" AnonymizationMethod : applies >
+Dataset "1" --- "0..*" DatasetVersion : snapshots >
+DatasetVersion "1" --- "0..*" AnonymizationMethod : records >
 Dataset "1" *-- "0..*" ColumnProfile : profile_json >
 Dataset "1" *-- "0..*" PiiFinding : pii_json >
 
 ExchangeRequest "*" --- "1" Dataset : targets >
+ExchangeRequest "*" --- "0..1" DatasetVersion : downloads >
 User "1" --- "*" ExchangeRequest : submits >
 User "0..1" --- "*" ExchangeRequest : reviews >
 User "0..1" --- "*" AuditEvent : performs >
@@ -191,7 +237,8 @@ note bottom of Dataset
   PR #18 stores profiling and PII as JSON:
   profile_json -> ColumnProfile[],
   pii_json -> PiiFinding[].
-  No separate DatasetVersion, ColumnProfile or PiiFinding tables.
+  Sprint 3 adds immutable raw/clean
+  snapshots in DatasetVersion.
 end note
 
 note right of LegalBasis
