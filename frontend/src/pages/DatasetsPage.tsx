@@ -62,9 +62,14 @@ export default function DatasetsPage() {
         key: 'actions',
         header: 'Дії',
         render: (r) => (
-          <Link to={`/datasets/${r.dataset_id}`} className="btn btn--secondary btn--sm">
-            Профіль
-          </Link>
+          <div className="actions">
+            <Link to={`/datasets/${r.dataset_id}`} className="btn btn--secondary btn--sm">
+              Профіль
+            </Link>
+            <Link to={`/datasets/${r.dataset_id}/publish`} className="btn btn--secondary btn--sm">
+              Публікація
+            </Link>
+          </div>
         ),
       },
     ]

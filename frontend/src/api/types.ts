@@ -166,3 +166,171 @@ export interface QualityReport {
   summary?: { duplicate_rows_count?: number }
   violations: QualityViolation[]
 }
+
+// ─── Sprint 3: публікація, правова підстава, обмін ───────────────────────────
+
+export type LegalBasisType = 'consent' | 'contract' | 'law'
+export type LegalBasisPurpose = 'analytics' | 'research' | 'reporting' | 'publication'
+
+export const LEGAL_BASIS_TYPE_LABELS: Record<LegalBasisType, string> = {
+  consent: 'Згода',
+  contract: 'Договір',
+  law: 'Закон',
+}
+
+export const LEGAL_BASIS_PURPOSE_LABELS: Record<LegalBasisPurpose, string> = {
+  analytics: 'Аналітика',
+  research: 'Дослідження',
+  reporting: 'Звітність',
+  publication: 'Публікація',
+}
+
+export interface LegalBasis {
+  id: string
+  dataset_id: number
+  type: LegalBasisType
+  document_ref: string
+  date: string
+  purpose: LegalBasisPurpose
+  valid_until: string | null
+  entered_by: number
+  created_at: string
+  revoked_at: string | null
+  revoked_by: number | null
+  revoked_reason: string | null
+  is_active: boolean
+}
+
+export interface LegalBasisCreatePayload {
+  type: LegalBasisType
+  document_ref: string
+  date: string
+  purpose: LegalBasisPurpose
+  valid_until?: string | null
+}
+
+export type AnonymizationMethodName = 'mask' | 'generalize' | 'hmac' | 'redact'
+
+export interface AnonymizationColumn {
+  column_name: string
+  pii_type: string
+  method: AnonymizationMethodName
+}
+
+export interface AnonymizationPreview {
+  dataset_id: number
+  pii_columns_count: number
+  estimated_class: DataClass
+  columns: AnonymizationColumn[]
+  sample_rows?: Record<string, string>[]
+}
+
+export interface AnonymizedVersion {
+  dataset_id: number
+  version_id: number
+  version_number: number
+  kind: 'clean'
+  file_name: string
+  row_count: number
+  sha256: string
+  data_class: DataClass
+  created_at: string
+}
+
+export interface DatasetVersionInfo {
+  id: number
+  kind: 'raw' | 'clean'
+  version_number: number
+  file_name: string
+  file_type: string
+  file_size: number
+  row_count: number
+  sha256: string
+  data_class: DataClass | null
+  created_by: string
+  created_at: string
+}
+
+export interface PublicationReason {
+  code: string
+  short_code: string
+  message: string
+  columns?: string[]
+  legal_basis_reason?: string
+}
+
+export interface PublicationCheck {
+  allowed: boolean
+  reasons: PublicationReason[]
+  new_class: DataClass
+  hmac_columns: string[]
+  missing_columns: string[]
+  clean_version_id: number | null
+}
+
+export interface PublishResult {
+  dataset_id: number
+  status: string
+  data_class: DataClass
+  published_at: string
+  published_by: string
+  retention_until: string
+  gate: PublicationCheck
+}
+
+export interface CatalogItem {
+  dataset_id: number
+  name: string
+  data_class: DataClass
+  quality_score: number | null
+  row_count: number
+  column_count: number
+  published_at: string | null
+  retention_until: string | null
+  clean_version_id: number | null
+  provider: string
+}
+
+export type ExchangeStatus =
+  | 'Requested'
+  | 'Approved'
+  | 'Rejected'
+  | 'Downloaded'
+  | 'Expired'
+
+export const EXCHANGE_STATUS_LABELS: Record<ExchangeStatus, string> = {
+  Requested: 'Очікує рішення',
+  Approved: 'Схвалено',
+  Rejected: 'Відхилено',
+  Downloaded: 'Завантажено',
+  Expired: 'Термін минув',
+}
+
+export interface ExchangeRequest {
+  id: number
+  dataset_id: number
+  dataset_name: string
+  dataset_version_id: number | null
+  requester_id: number
+  requester_email: string
+  reviewer_id: number | null
+  reviewer_email: string | null
+  status: ExchangeStatus
+  purpose: LegalBasisPurpose
+  requested_at: string
+  decided_at: string | null
+  review_comment: string | null
+  access_until: string | null
+  downloaded_at: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface AuditLogEntry {
+  id: number
+  timestamp: string
+  actor: string
+  action: string
+  object: string
+  result: string
+}

@@ -7,7 +7,9 @@ import AccessRequestsPage from './pages/AccessRequestsPage'
 import AuditPage from './pages/AuditPage'
 import CatalogPage from './pages/CatalogPage'
 import DatasetsPage from './pages/DatasetsPage'
+import LegalBasisPage from './pages/LegalBasisPage'
 import LoginPage from './pages/LoginPage'
+import PublicationPage from './pages/PublicationPage'
 import NotFoundPage from './pages/NotFoundPage'
 import PiiPage from './pages/PiiPage'
 import ProfilePage from './pages/ProfilePage'
@@ -33,9 +35,11 @@ export default function App() {
             <Route path="/datasets/:id/pii" element={<PiiPage />} />
             <Route path="/upload" element={<UploadPage />} />
             <Route path="/access" element={<AccessRequestsPage />} />
+            <Route path="/datasets/:id/publish" element={<PublicationPage />} />
           </Route>
           <Route element={<RequireRole allow={['DataProvider', 'DataSteward']} />}>
             <Route path="/datasets/:id/quality" element={<QualityRulesPage />} />
+            <Route path="/datasets/:id/legal" element={<LegalBasisPage />} />
           </Route>
           <Route element={<RequireRole allow={['DataConsumer', 'DataSteward']} />}>
             <Route path="/catalog" element={<CatalogPage />} />

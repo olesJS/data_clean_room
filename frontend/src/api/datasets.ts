@@ -11,6 +11,32 @@ import type {
   UploadResult,
 } from './types'
 
+/** Бекенд зберігає статуси в нижньому регістрі, інтерфейс — з великої літери. */
+const STATUS_FROM_API: Record<string, DatasetVersion['status']> = {
+  uploaded: 'Uploaded',
+  profiled: 'Profiled',
+  'needs attention': 'Needs attention',
+  published: 'Published',
+  expired: 'Expired',
+}
+
+const CLASS_FROM_API: Record<string, DatasetVersion['data_class']> = {
+  public: 'Public',
+  internal: 'Internal',
+  confidential: 'Confidential',
+  personal: 'Personal',
+}
+
+export function normalizeDatasetStatus(value: unknown): DatasetVersion['status'] {
+  const key = String(value ?? 'uploaded').toLowerCase()
+  return STATUS_FROM_API[key] ?? 'Uploaded'
+}
+
+export function normalizeDataClass(value: unknown): DatasetVersion['data_class'] {
+  const key = String(value ?? 'Internal').toLowerCase()
+  return CLASS_FROM_API[key] ?? 'Internal'
+}
+
 /** GET /datasets. Мапимо бекенд-відповідь на інтерфейс фронтенду DatasetVersion */
 export async function fetchDatasets(): Promise<DatasetVersion[]> {
   if (config.useMock) return mockDatasets()
@@ -22,8 +48,8 @@ export async function fetchDatasets(): Promise<DatasetVersion[]> {
     dataset_name: (item.name as string) || '',
     file_name: (item.original_filename as string) || (item.name as string) || '',
     format: ((item.file_type as string) || 'CSV').toUpperCase() as 'CSV' | 'JSON',
-    data_class: ((item.data_class as string) || 'Internal') as DatasetVersion['data_class'],
-    status: ((item.status as string) || 'Uploaded') as DatasetVersion['status'],
+    data_class: normalizeDataClass(item.data_class),
+    status: normalizeDatasetStatus(item.status),
     quality_score: (item.quality_score as number | null) ?? null,
     version_number: 1,
     parent_version_id: null,
