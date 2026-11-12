@@ -29,6 +29,13 @@ class User {
     + request_access(dataset_id: int): ExchangeRequest
 }
 
+class Role {
+    + id: int
+    + name: string
+    + description: string
+    + created_at: datetime
+}
+
 class Policy {
     + id: int
     + name: string
@@ -198,6 +205,7 @@ class AuditEvent {
 ' ==========================================
 
 User "1" --- "0..*" Dataset : owns >
+User "*" --- "1" Role : assigned >
 Policy "1" --- "*" Dataset : applies to >
 
 Dataset "1" --- "0..*" LegalBasis : governed by >
