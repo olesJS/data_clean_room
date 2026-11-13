@@ -1,0 +1,106 @@
+@startuml
+!pragma layout smetana
+skinparam sequenceMessageAlign center
+skinparam responseMessageBelowArrow true
+skinparam roundcorner 8
+skinparam shadowing false
+skinparam defaultFontName "Segoe UI", Arial, sans-serif
+skinparam participant {
+    BackgroundColor #FFFFFF
+    BorderColor #2C3E50
+}
+skinparam sequence {
+    ArrowColor #2C3E50
+    LifeLineBorderColor #95A5A6
+    LifeLineBackgroundColor #F8F9F9
+}
+
+title Data Clean Room - Exchange Request Sequence (Sprint 3, SCRUM-59)
+
+actor Consumer
+actor Provider
+participant Frontend
+participant "API\n(FastAPI)" as API
+participant "AuthZ\n(RBAC)" as AuthZ
+participant "LegalBasisService" as LBS
+database DB
+participant FileStorage
+participant AuditLog
+
+autonumber
+
+== Create exchange request ==
+Consumer -> Frontend: request access to a published dataset
+Frontend -> API: POST /api/requests\n{dataset_id, purpose}
+API -> AuthZ: require role DataConsumer
+AuthZ --> API: allowed
+API -> DB: load dataset and clean version
+DB --> API: dataset (status=published, clean version)
+API -> DB: insert ExchangeRequest(status=Requested)
+API -> AuditLog: log REQUEST
+API --> Frontend: 201 Created
+Frontend --> Consumer: request submitted
+
+== Approve or reject request ==
+Provider -> Frontend: open pending request
+Frontend -> API: POST /api/requests/{id}/approve
+API -> AuthZ: require dataset owner (DataProvider)
+AuthZ --> API: allowed
+API -> LBS: check_legal_basis(dataset, purpose)
+alt legal basis is valid
+    LBS --> API: ok
+    API -> DB: update status=Approved,\nreviewed_by, reviewed_at
+    API -> AuditLog: log REQUEST_APPROVED
+    API --> Frontend: 200 Approved
+else no legal basis / revoked / expired / purpose mismatch
+    LBS --> API: reason
+    API -> AuditLog: log DENY\nreason=legal_basis_invalid
+    API --> Frontend: 409 Conflict\n{reason}
+end
+Frontend --> Provider: decision saved
+
+group Reject request
+    Provider -> Frontend: reject with a reason
+    Frontend -> API: POST /api/requests/{id}/reject\n{reason}
+    API -> AuthZ: require dataset owner (DataProvider)
+    AuthZ --> API: allowed
+    API -> DB: update status=Rejected,\nreview_comment, reviewed_at
+    API -> AuditLog: log REQUEST_REJECTED
+    API --> Frontend: 200 Rejected
+    Frontend --> Provider: request rejected
+end
+
+== Download clean version ==
+Consumer -> Frontend: download approved dataset
+Frontend -> API: GET /api/requests/{id}/download
+API -> AuthZ: require role DataConsumer
+AuthZ --> API: allowed
+API -> DB: load request and clean version\nof its dataset
+DB --> API: request (Approved), version (clean)
+API -> LBS: check_legal_basis(dataset, purpose)
+alt consent is valid and version is clean
+    LBS --> API: ok
+    API -> FileStorage: read clean version
+    FileStorage --> API: file stream
+    API -> DB: update status=Downloaded
+    API -> AuditLog: log DOWNLOAD
+    API --> Frontend: 200 file
+    Frontend --> Consumer: clean dataset
+else consent revoked between approval and download
+    LBS --> API: revoked
+    API -> AuditLog: log DENY\nreason=legal_basis_invalid
+    API --> Frontend: 403 Forbidden\n{reason}
+end
+
+note over API, FileStorage
+  Raw Personal data is never served.
+  A raw-version download is always 403 + DENY.
+end note
+
+note over API, AuthZ
+  Only the dataset owner (DataProvider) can approve or reject.
+  A non-owner gets 403 (UC-09 EX1); DataSteward has no approval rights.
+  Jira descriptions 56/63/64/67/68 must be corrected separately.
+end note
+
+@enduml
