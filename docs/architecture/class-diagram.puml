@@ -22,18 +22,17 @@ title Data Clean Room - Class Diagram (Sprint 3 target: exchange, publication, c
 class User {
     + id: int
     + email: string
-    + role: string
+    + role: Role
     + created_at: datetime
     --
     + login(): bool
     + request_access(dataset_id: int): ExchangeRequest
 }
 
-class Role {
-    + id: int
-    + name: string
-    + description: string
-    + created_at: datetime
+enum Role {
+    DataProvider
+    DataConsumer
+    DataSteward
 }
 
 class Policy {
