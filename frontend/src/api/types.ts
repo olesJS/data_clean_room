@@ -213,3 +213,87 @@ export interface AnonymizedVersion {
   data_class: DataClass
   created_at: string
 }
+
+// ─── Sprint 3: Публікація та правові підстави (UC-07, SCRUM-62) ───────────────
+
+export type LegalBasisType = 'consent' | 'contract' | 'law'
+export type LegalBasisPurpose = 'analytics' | 'research' | 'reporting' | 'publication'
+
+export const LEGAL_BASIS_TYPE_LABELS: Record<LegalBasisType, string> = {
+  consent: 'Згода суб’єкта (Consent)',
+  contract: 'Договір (Contract)',
+  law: 'Закон / обов’язок (Legal obligation)',
+}
+
+export const LEGAL_BASIS_PURPOSE_LABELS: Record<LegalBasisPurpose, string> = {
+  analytics: 'Аналітика',
+  research: 'Наукові дослідження',
+  reporting: 'Звітність',
+  publication: 'Публічний доступ',
+}
+
+export interface LegalBasis {
+  id: string
+  dataset_id: number
+  type: LegalBasisType
+  document_ref: string
+  date: string
+  purpose: LegalBasisPurpose
+  valid_until: string | null
+  entered_by: number
+  created_at: string
+  revoked_at: string | null
+  revoked_by: number | null
+  revoked_reason: string | null
+  is_active: boolean
+}
+
+export interface LegalBasisCreatePayload {
+  type: LegalBasisType
+  document_ref: string
+  date: string
+  purpose: LegalBasisPurpose
+  valid_until?: string | null
+}
+
+export interface DatasetVersionInfo {
+  id: number
+  kind: 'raw' | 'clean'
+  version_number: number
+  file_name: string
+  file_type: string
+  file_size: number
+  row_count: number
+  sha256: string
+  data_class: DataClass | null
+  created_by: string
+  created_at: string
+}
+
+export interface PublicationReason {
+  code: string
+  short_code: string
+  message: string
+  columns?: string[]
+  legal_basis_reason?: string
+}
+
+export interface PublicationCheck {
+  allowed: boolean
+  reasons: PublicationReason[]
+  new_class: DataClass
+  hmac_columns: string[]
+  missing_columns: string[]
+  clean_version_id: number | null
+}
+
+export interface PublishResult {
+  dataset_id: number
+  status: string
+  data_class: DataClass
+  published_at: string
+  published_by: string
+  retention_until: string
+  gate: PublicationCheck
+}
+

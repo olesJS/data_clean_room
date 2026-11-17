@@ -8,11 +8,17 @@ import type {
   DataClass,
   DatasetProfileResponse,
   DatasetVersion,
+  DatasetVersionInfo,
+  LegalBasis,
+  LegalBasisCreatePayload,
   LoginResponse,
   PiiFinding,
   PiiScanResponse,
   PiiType,
   PiiUpdatePayload,
+  PublicationCheck,
+  PublicationReason,
+  PublishResult,
   QualityReport,
   QualityRule,
   QualityViolation,
@@ -705,4 +711,216 @@ export async function mockApplyAnonymization(
     data_class: hasHmac ? 'Personal' : 'Confidential',
     created_at: new Date().toISOString(),
   }
+}
+
+// ─── Sprint 3: Mock публікації та правових підстав (UC-07, SCRUM-62) ──────────
+
+const mockLegalBasesStore: Record<number, LegalBasis[]> = {
+  101: [
+    {
+      id: 'lb-101-1',
+      dataset_id: 101,
+      type: 'consent',
+      document_ref: 'Згода на обробку персональних даних № 101-A',
+      date: '2026-01-15',
+      purpose: 'analytics',
+      valid_until: '2027-12-31',
+      entered_by: 1,
+      created_at: '2026-01-15T10:00:00Z',
+      revoked_at: null,
+      revoked_by: null,
+      revoked_reason: null,
+      is_active: true,
+    },
+  ],
+  103: [
+    {
+      id: 'lb-103-1',
+      dataset_id: 103,
+      type: 'contract',
+      document_ref: 'Публічний договір оферти (розділ 8: аналітика)',
+      date: '2026-02-01',
+      purpose: 'analytics',
+      valid_until: null,
+      entered_by: 1,
+      created_at: '2026-02-01T12:00:00Z',
+      revoked_at: null,
+      revoked_by: null,
+      revoked_reason: null,
+      is_active: true,
+    },
+  ],
+}
+
+export async function mockLegalBasis(datasetId: number | string): Promise<LegalBasis[]> {
+  await delay(300)
+  const numId = Number(datasetId)
+  if (!mockLegalBasesStore[numId]) {
+    mockLegalBasesStore[numId] = [
+      {
+        id: `lb-${numId}-1`,
+        dataset_id: numId,
+        type: 'consent',
+        document_ref: `Згода на обробку ПД для набору #${numId}`,
+        date: new Date().toISOString().slice(0, 10),
+        purpose: 'analytics',
+        valid_until: '2027-12-31',
+        entered_by: 1,
+        created_at: new Date().toISOString(),
+        revoked_at: null,
+        revoked_by: null,
+        revoked_reason: null,
+        is_active: true,
+      },
+    ]
+  }
+  return [...mockLegalBasesStore[numId]]
+}
+
+export async function mockCreateLegalBasis(
+  datasetId: number | string,
+  payload: LegalBasisCreatePayload,
+): Promise<LegalBasis> {
+  await delay(400)
+  const numId = Number(datasetId)
+  const entry: LegalBasis = {
+    id: `lb-${numId}-${Date.now()}`,
+    dataset_id: numId,
+    type: payload.type,
+    document_ref: payload.document_ref,
+    date: payload.date,
+    purpose: payload.purpose,
+    valid_until: payload.valid_until ?? null,
+    entered_by: 1,
+    created_at: new Date().toISOString(),
+    revoked_at: null,
+    revoked_by: null,
+    revoked_reason: null,
+    is_active: true,
+  }
+  if (!mockLegalBasesStore[numId]) mockLegalBasesStore[numId] = []
+  mockLegalBasesStore[numId].unshift(entry)
+  return entry
+}
+
+export async function mockRevokeLegalBasis(
+  id: string,
+  reason: string,
+): Promise<LegalBasis> {
+  await delay(400)
+  for (const list of Object.values(mockLegalBasesStore)) {
+    const found = list.find((item) => item.id === id)
+    if (found) {
+      found.revoked_at = new Date().toISOString()
+      found.revoked_by = 1
+      found.revoked_reason = reason
+      found.is_active = false
+      return { ...found }
+    }
+  }
+  throw new ApiError('Правову підставу не знайдено', 404)
+}
+
+export async function mockCheckPublication(
+  datasetId: number | string,
+  retentionUntil?: string,
+): Promise<PublicationCheck> {
+  await delay(350)
+  const numId = Number(datasetId)
+  const reasons: PublicationReason[] = []
+
+  // Перевірка терміну зберігання
+  const todayStr = new Date().toISOString().slice(0, 10)
+  if (!retentionUntil || retentionUntil < todayStr) {
+    reasons.push({
+      code: 'retention_required',
+      short_code: 'retention_req',
+      message: 'Термін зберігання обов’язковий і має бути не раніше поточної дати.',
+    })
+  }
+
+  // Перевірка активних підстав для HMAC
+  const bases = mockLegalBasesStore[numId] ?? []
+  const hasActiveBasis = bases.some((b) => b.is_active && !b.revoked_at)
+  const isHmacDataset = numId === 101 || numId === 103 || numId === 1
+
+  if (isHmacDataset && !hasActiveBasis) {
+    reasons.push({
+      code: 'hmac_without_legal_basis',
+      short_code: 'hmac_no_basis',
+      message: 'Для колонок із HMAC (псевдонімізація) потрібна чинна правова підстава.',
+      columns: ['ipn'],
+      legal_basis_reason: 'Жодної активної згоди або договору для мети обробки не знайдено',
+    })
+  }
+
+  return {
+    allowed: reasons.length === 0,
+    reasons,
+    new_class: isHmacDataset ? 'Personal' : 'Confidential',
+    hmac_columns: isHmacDataset ? ['ipn'] : [],
+    missing_columns: [],
+    clean_version_id: 2,
+  }
+}
+
+export async function mockPublishDataset(
+  datasetId: number | string,
+  retentionUntil: string,
+): Promise<PublishResult> {
+  await delay(600)
+  const gate = await mockCheckPublication(datasetId, retentionUntil)
+  if (!gate.allowed) {
+    throw new ApiError('Publication gate failed: умови публікації не виконано', 422)
+  }
+
+  const numId = Number(datasetId)
+  const isHmacDataset = numId === 101 || numId === 103 || numId === 1
+
+  return {
+    dataset_id: numId,
+    status: 'published',
+    data_class: isHmacDataset ? 'Personal' : 'Confidential',
+    published_at: new Date().toISOString(),
+    published_by: storage.getEmail() ?? 'provider@example.com',
+    retention_until: retentionUntil,
+    gate,
+  }
+}
+
+export async function mockDatasetVersions(
+  datasetId: number | string,
+): Promise<DatasetVersionInfo[]> {
+  await delay(250)
+  const numId = Number(datasetId)
+  const isCustomer = numId === 103 || numId === 2
+
+  return [
+    {
+      id: 2,
+      kind: 'clean',
+      version_number: 2,
+      file_name: isCustomer ? 'customers_clean.json' : 'payroll_clean.csv',
+      file_type: isCustomer ? 'json' : 'csv',
+      file_size: isCustomer ? 84200 : 124500,
+      row_count: isCustomer ? 300 : 500,
+      sha256: '4f83b28b7a32c256a847e096f26487968565c404cf755d57b1ac656f4d0d0246',
+      data_class: 'Personal',
+      created_by: 'provider@example.com',
+      created_at: new Date().toISOString(),
+    },
+    {
+      id: 1,
+      kind: 'raw',
+      version_number: 1,
+      file_name: isCustomer ? 'customers.json' : 'payroll.csv',
+      file_type: isCustomer ? 'json' : 'csv',
+      file_size: isCustomer ? 92100 : 138000,
+      row_count: isCustomer ? 300 : 500,
+      sha256: '1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b',
+      data_class: 'Personal',
+      created_by: 'provider@example.com',
+      created_at: '2026-10-15T12:00:00Z',
+    },
+  ]
 }

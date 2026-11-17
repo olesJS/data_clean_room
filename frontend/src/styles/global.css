@@ -684,6 +684,18 @@ p { margin: 0; }
   border-radius: 8px;
 }
 
+/* ─── Sprint 3: Публікація та правові підстави (UC-07, SCRUM-62) ─────────────── */
+.publish-page { display: flex; flex-direction: column; gap: var(--space-6); }
+.legal-basis-card { display: flex; flex-direction: column; gap: var(--space-4); }
+.field-label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; font-weight: 500; }
+.field-label__text { color: var(--color-primary); }
+.gate-section { border-width: 2px; }
+.gate-item { transition: background-color 0.2s ease, border-color 0.2s ease; border: 1px solid transparent; }
+.gate-item--ok { border-color: color-mix(in srgb, var(--color-success) 30%, transparent); }
+.gate-item--fail { border-color: color-mix(in srgb, var(--color-danger) 30%, transparent); }
+.published-success-card { animation: fade-in 0.3s ease; }
+@keyframes fade-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
+
 @media (max-width: 900px) {
 
   .app { flex-direction: column; }

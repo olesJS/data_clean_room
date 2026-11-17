@@ -22,4 +22,9 @@ export const endpoints = {
   anonymize: (id: number | string) => `/api/datasets/${id}/anonymize`,
   datasetAnonymizePreview: (id: number | string) => `/api/datasets/${id}/anonymize/preview`,
   datasetAnonymize: (id: number | string) => `/api/datasets/${id}/anonymize`,
+  legalBasis: (id: number | string) => `/api/datasets/${id}/legal-basis`,
+  legalBasisRevoke: (id: string) => `/api/legal-basis/${id}/revoke`,
+  publishCheck: (id: number | string) => `/api/datasets/${id}/publish/check`,
+  publish: (id: number | string) => `/api/datasets/${id}/publish`,
+  datasetVersions: (id: number | string) => `/api/datasets/${id}/versions`,
 }

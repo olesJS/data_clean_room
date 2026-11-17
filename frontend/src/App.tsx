@@ -12,6 +12,7 @@ import LoginPage from './pages/LoginPage'
 import NotFoundPage from './pages/NotFoundPage'
 import PiiPage from './pages/PiiPage'
 import ProfilePage from './pages/ProfilePage'
+import PublishPage from './pages/PublishPage'
 import QualityRulesPage from './pages/QualityRulesPage'
 import RequestsPage from './pages/RequestsPage'
 import UploadPage from './pages/UploadPage'
@@ -33,6 +34,7 @@ export default function App() {
             <Route path="/datasets/:id" element={<ProfilePage />} />
             <Route path="/datasets/:id/pii" element={<PiiPage />} />
             <Route path="/datasets/:id/anonymize" element={<AnonymizePage />} />
+            <Route path="/datasets/:id/publish" element={<PublishPage />} />
             <Route path="/upload" element={<UploadPage />} />
             <Route path="/access" element={<AccessRequestsPage />} />
           </Route>

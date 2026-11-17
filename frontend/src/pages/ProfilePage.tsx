@@ -139,6 +139,9 @@ export default function ProfilePage() {
           <Link to={`/datasets/${datasetId}/pii`} className="btn btn--secondary">
             PII результати
           </Link>
+          <Link to={`/datasets/${datasetId}/publish`} className="btn btn--primary">
+            Публікація
+          </Link>
           <Button variant="secondary" onClick={loadProfile} disabled={loading}>
             <IconRefresh size={16} />
             <span>Оновити</span>
