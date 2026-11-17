@@ -302,7 +302,7 @@ async def upload_dataset(
             actor=actor,
             action="PII_SCAN",
             object=f"dataset:{dataset.id}:{dataset.name}",
-            result=f"FOUND_{len(dataset.pii_json or [])}_PII_COLUMNS",
+            result="SUCCESS",
             db=db,
         )
     except Exception as exc:
