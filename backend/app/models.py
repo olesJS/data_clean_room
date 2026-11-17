@@ -144,6 +144,41 @@ class DatasetVersion(Base):
     creator = relationship("User", backref="created_dataset_versions")
 
 
+class AnonymizationMethodType(str, enum.Enum):
+    MASK = "mask"
+    GENERALIZE = "generalize"
+    HMAC = "hmac"
+
+
+class AnonymizationMethod(Base):
+    """Tracks applied anonymization methods per column for dataset versions."""
+
+    __tablename__ = "anonymization_methods"
+
+    id = Column(Integer, primary_key=True, index=True)
+    dataset_id = Column(
+        Integer,
+        ForeignKey("datasets.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    column_name = Column(String(255), nullable=False)
+    method = Column(
+        SQLEnum(AnonymizationMethodType, name="anonymization_method_enum"),
+        nullable=False,
+    )
+    params = Column(JSON, nullable=True)
+    applied_by = Column(
+        Integer,
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    applied_at = Column(DateTime, default=utc_now, nullable=False)
+
+    dataset = relationship("Dataset", backref="anonymization_methods")
+    user = relationship("User", backref="applied_anonymizations")
+
+
 __all__ = [
     "Base",
     "User",
@@ -151,6 +186,8 @@ __all__ = [
     "Dataset",
     "DatasetVersion",
     "DatasetVersionKind",
+    "AnonymizationMethod",
+    "AnonymizationMethodType",
     "LegalBasis",
     "LegalBasisType",
 ]

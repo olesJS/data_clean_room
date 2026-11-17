@@ -19,8 +19,8 @@ from app.database import DATABASE_URL, Base  # noqa: E402
 config = context.config
 
 # Overwrite sqlalchemy.url from DATABASE_URL if available
-# and not already passed via config
-if not config.get_main_option("sqlalchemy.url") and DATABASE_URL:
+url_opt = config.get_main_option("sqlalchemy.url")
+if (not url_opt or "driver://user:pass" in url_opt) and DATABASE_URL:
     config.set_main_option("sqlalchemy.url", DATABASE_URL)
 
 # Interpret the config file for Python logging.
