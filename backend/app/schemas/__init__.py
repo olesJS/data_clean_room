@@ -79,6 +79,7 @@ class ColumnProfile(BaseModel):
     max: Optional[Any] = None
     mean: Optional[float] = None
     outliers_count: int
+    future_dates_count: Optional[int] = 0
     histogram: Optional[ColumnHistogram] = None
 
 

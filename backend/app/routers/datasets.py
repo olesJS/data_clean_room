@@ -296,6 +296,15 @@ async def upload_dataset(
         dataset.pii_json = profile.get("pii_findings", pii_cols)
         db.commit()
         db.refresh(dataset)
+
+        # Log PII_SCAN event after profiling completes
+        log_event(
+            actor=actor,
+            action="PII_SCAN",
+            object=f"dataset:{dataset.id}:{dataset.name}",
+            result=f"FOUND_{len(dataset.pii_json or [])}_PII_COLUMNS",
+            db=db,
+        )
     except Exception as exc:
         logger.warning(
             "Could not profile dataset %d: %s", dataset.id, exc, exc_info=True
@@ -525,7 +534,7 @@ def get_dataset_pii(
 
     log_event(
         actor=current_user.email,
-        action="GET_DATASET_PII",
+        action="VIEW_PII",
         object=f"dataset:{dataset.id}:{dataset.name}",
         result="SUCCESS",
         db=db,
