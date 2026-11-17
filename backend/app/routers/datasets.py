@@ -326,6 +326,17 @@ def list_datasets(
             .order_by(Dataset.created_at.desc())
             .all()
         )
+    elif current_user.role == "DataConsumer":
+        # Data Consumer only sees published datasets; unpublished/raw are forbidden
+        if hasattr(Dataset, "status"):
+            datasets = (
+                db.query(Dataset)
+                .filter(getattr(Dataset, "status") == "published")
+                .order_by(Dataset.created_at.desc())
+                .all()
+            )
+        else:
+            datasets = []
     else:
         datasets = db.query(Dataset).order_by(Dataset.created_at.desc()).all()
 

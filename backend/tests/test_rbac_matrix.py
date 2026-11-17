@@ -251,15 +251,6 @@ def test_provider_sees_only_own_datasets(client):
     assert all(d["uploaded_by"] == USERS["provider"] for d in listed)
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "SCRUM-52: GET /datasets повертає Data Consumer усі завантажені "
-        "(неопубліковані) набори. За матрицею 3.2 сирий набір Consumer "
-        "заборонено, решта доступна лише Public або після схвалення запиту. "
-        "Зняти xfail після виправлення SCRUM-52."
-    ),
-)
 def test_consumer_does_not_see_unpublished_datasets(client):
     filename = f"rbac-{uuid.uuid4().hex}.csv"
     up = _call(client, "POST", "/datasets", _headers("provider"), filename)
