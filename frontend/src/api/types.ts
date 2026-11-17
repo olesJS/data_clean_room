@@ -166,3 +166,50 @@ export interface QualityReport {
   summary?: { duplicate_rows_count?: number }
   violations: QualityViolation[]
 }
+
+// ─── Sprint 3: Анонімізація «до/після» (UC-06, SCRUM-61) ───────────────────────
+
+export type AnonymizationMethodName = 'mask' | 'generalize' | 'hmac' | 'redact'
+
+export const ANONYMIZATION_METHOD_LABELS: Record<AnonymizationMethodName, string> = {
+  mask: 'Маскування (***)',
+  generalize: 'Узагальнення',
+  hmac: 'HMAC (псевдонімізація)',
+  redact: 'Видалення колонки',
+}
+
+export interface AnonymizationColumn {
+  column_name: string
+  pii_type: string
+  method: AnonymizationMethodName
+}
+
+export interface AnonymizationPreviewRow {
+  row_index: number
+  original: Record<string, string>
+  anonymized: Record<string, string>
+}
+
+export interface AnonymizationPreview {
+  dataset_id: number
+  dataset_name?: string
+  pii_columns_count: number
+  estimated_class: DataClass
+  hmac_requires_legal_basis?: boolean
+  method_counts?: Record<string, number>
+  columns: AnonymizationColumn[]
+  sample_rows?: Record<string, string>[]
+  preview_pairs?: AnonymizationPreviewRow[]
+}
+
+export interface AnonymizedVersion {
+  dataset_id: number
+  version_id: number
+  version_number: number
+  kind: 'clean'
+  file_name: string
+  row_count: number
+  sha256: string
+  data_class: DataClass
+  created_at: string
+}

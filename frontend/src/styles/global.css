@@ -616,7 +616,76 @@ p { margin: 0; }
 
 .qr-sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 
+/* ─── Sprint 3: Анонімізація «до/після» (UC-06, SCRUM-61) ─────────────────────── */
+.anonymize-page { display: flex; flex-direction: column; gap: var(--space-4); }
+.anonymize-row td { vertical-align: middle; }
+.method-select {
+  width: 100%;
+  max-width: 240px;
+  padding: 6px 10px;
+  font-size: 13px;
+  font-weight: 500;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-line);
+  background: var(--color-white);
+  color: var(--color-primary);
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.method-select:focus {
+  border-color: var(--color-info);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-info) 20%, transparent);
+}
+.hmac-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.clean-version-card {
+  border: 2px solid var(--color-success);
+  background: color-mix(in srgb, var(--color-success) 4%, white);
+}
+.diff-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-md);
+  margin-top: var(--space-4);
+}
+.diff-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 13px;
+}
+.diff-table th {
+  padding: 8px 12px;
+  background: var(--color-light);
+  font-weight: 600;
+  border-bottom: 1px solid var(--color-line);
+}
+.diff-table td {
+  border-bottom: 1px solid var(--color-line);
+}
+.diff-table tbody tr:hover {
+  background: color-mix(in srgb, var(--color-light) 60%, white);
+}
+.cell-diff {
+  background: var(--sky-bg) !important;
+  color: var(--sky-text) !important;
+  font-weight: 600;
+}
+.skeleton-row {
+  background: linear-gradient(90deg, var(--color-line) 25%, var(--color-light) 50%, var(--color-line) 75%);
+  background-size: 200% 100%;
+  animation: qr-shimmer 1.4s linear infinite;
+  border-radius: 8px;
+}
+
 @media (max-width: 900px) {
+
   .app { flex-direction: column; }
   .sidebar { width: 100%; height: auto; position: static; }
   .main { padding: var(--space-6); }

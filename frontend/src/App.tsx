@@ -4,6 +4,7 @@ import { useAuth } from './auth/useAuth'
 import { AppLayout } from './layout/AppLayout'
 import { HOME_BY_ROLE } from './layout/nav'
 import AccessRequestsPage from './pages/AccessRequestsPage'
+import AnonymizePage from './pages/AnonymizePage'
 import AuditPage from './pages/AuditPage'
 import CatalogPage from './pages/CatalogPage'
 import DatasetsPage from './pages/DatasetsPage'
@@ -31,6 +32,7 @@ export default function App() {
             <Route path="/datasets" element={<DatasetsPage />} />
             <Route path="/datasets/:id" element={<ProfilePage />} />
             <Route path="/datasets/:id/pii" element={<PiiPage />} />
+            <Route path="/datasets/:id/anonymize" element={<AnonymizePage />} />
             <Route path="/upload" element={<UploadPage />} />
             <Route path="/access" element={<AccessRequestsPage />} />
           </Route>
