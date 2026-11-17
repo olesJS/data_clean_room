@@ -1,3 +1,4 @@
+import hashlib
 import io
 import json
 import logging
@@ -20,7 +21,7 @@ from sqlalchemy.orm import Session
 from app.audit import log_event
 from app.auth import get_current_user, require_role
 from app.database import get_db
-from app.models import Dataset, User
+from app.models import Dataset, DatasetVersion, DatasetVersionKind, User
 from app.profiler import profile_dataframe
 from app.schemas import (
     DatasetProfileResponse,
@@ -271,6 +272,19 @@ async def upload_dataset(
     db.add(dataset)
     db.commit()
     db.refresh(dataset)
+
+    # 6a. Compute sha256 and create initial raw DatasetVersion
+    raw_sha256 = hashlib.sha256(content).hexdigest()
+    raw_version = DatasetVersion(
+        dataset_id=dataset.id,
+        kind=DatasetVersionKind.RAW,
+        file_path=saved_file_path,
+        sha256=raw_sha256,
+        row_count=row_count,
+        created_by=current_user.id,
+    )
+    db.add(raw_version)
+    db.commit()
 
     # 6b. Run profiling immediately after saving
     try:

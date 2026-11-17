@@ -2,7 +2,16 @@ import enum
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import JSON, Column, Date, DateTime, Float, ForeignKey, Integer, String
+from sqlalchemy import (
+    JSON,
+    Column,
+    Date,
+    DateTime,
+    Float,
+    ForeignKey,
+    Integer,
+    String,
+)
 from sqlalchemy import Enum as SQLEnum
 from sqlalchemy.orm import relationship
 
@@ -96,11 +105,52 @@ class LegalBasis(Base):
     user = relationship("User", backref="entered_legal_bases")
 
 
+class DatasetVersionKind(str, enum.Enum):
+    RAW = "raw"
+    CLEAN = "clean"
+
+
+class DatasetVersion(Base):
+    """Stores versions of datasets (raw uploaded vs clean/anonymized)."""
+
+    __tablename__ = "dataset_versions"
+    __table_args__ = (
+        # At most one raw version per dataset is allowed
+        # (clean versions can be replaced or multiple depending on pipeline)
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    dataset_id = Column(
+        Integer,
+        ForeignKey("datasets.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    kind = Column(
+        SQLEnum(DatasetVersionKind, name="dataset_version_kind_enum"),
+        nullable=False,
+    )
+    file_path = Column(String(500), nullable=False)
+    sha256 = Column(String(64), nullable=False)
+    row_count = Column(Integer, nullable=False)
+    created_by = Column(
+        Integer,
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    created_at = Column(DateTime, default=utc_now, nullable=False)
+
+    dataset = relationship("Dataset", backref="versions")
+    creator = relationship("User", backref="created_dataset_versions")
+
+
 __all__ = [
     "Base",
     "User",
     "AuditLog",
     "Dataset",
+    "DatasetVersion",
+    "DatasetVersionKind",
     "LegalBasis",
     "LegalBasisType",
 ]
