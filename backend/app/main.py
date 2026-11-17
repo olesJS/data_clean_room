@@ -6,7 +6,15 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 
 from app.database import engine, init_db
-from app.routers import audit, auth, datasets, legal_basis, publication, quality
+from app.routers import (
+    audit,
+    auth,
+    datasets,
+    exchange,
+    legal_basis,
+    publication,
+    quality,
+)
 
 
 @asynccontextmanager
@@ -39,6 +47,7 @@ app.include_router(datasets.router)
 app.include_router(legal_basis.router)
 app.include_router(quality.router)
 app.include_router(publication.router)
+app.include_router(exchange.router)
 
 
 @app.get("/")

@@ -61,6 +61,7 @@ class Dataset(Base):
     quality_score = Column(Float, nullable=True)
     profile_json = Column(JSON, nullable=True)
     pii_json = Column(JSON, nullable=True)
+    status = Column(String(50), default="uploaded", nullable=False)
 
 
 class LegalBasisType(str, enum.Enum):
@@ -179,6 +180,58 @@ class AnonymizationMethod(Base):
     user = relationship("User", backref="applied_anonymizations")
 
 
+class ExchangeRequestStatus(str, enum.Enum):
+    PENDING = "pending"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+
+
+class ExchangeRequest(Base):
+    """Consumer requests to access and download clean anonymized datasets."""
+
+    __tablename__ = "exchange_requests"
+
+    id = Column(Integer, primary_key=True, index=True)
+    dataset_id = Column(
+        Integer,
+        ForeignKey("datasets.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    consumer_id = Column(
+        Integer,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    purpose = Column(String(500), nullable=False)
+    status = Column(
+        SQLEnum(ExchangeRequestStatus, name="exchange_request_status_enum"),
+        default=ExchangeRequestStatus.PENDING,
+        nullable=False,
+    )
+    reviewed_by = Column(
+        Integer,
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    review_comment = Column(String(500), nullable=True)
+    created_at = Column(DateTime, default=utc_now, nullable=False)
+    reviewed_at = Column(DateTime, nullable=True)
+
+    dataset = relationship("Dataset", backref="exchange_requests")
+    consumer = relationship(
+        "User",
+        foreign_keys=[consumer_id],
+        backref="exchange_requests",
+    )
+    reviewer = relationship(
+        "User",
+        foreign_keys=[reviewed_by],
+        backref="reviewed_exchange_requests",
+    )
+
+
 __all__ = [
     "Base",
     "User",
@@ -190,4 +243,6 @@ __all__ = [
     "AnonymizationMethodType",
     "LegalBasis",
     "LegalBasisType",
+    "ExchangeRequest",
+    "ExchangeRequestStatus",
 ]
