@@ -105,7 +105,7 @@ def create_exchange_request(
             actor=actor,
             action="REQUEST_DATASET",
             object=f"dataset:{payload.dataset_id}",
-            result="NOT_FOUND",
+            result="FAILURE",
             db=db,
         )
         raise HTTPException(

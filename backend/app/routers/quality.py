@@ -53,7 +53,7 @@ def _check_dataset_access(
             actor=actor,
             action="ACCESS_DENIED",
             object=path,
-            result="NOT_FOUND",
+            result="FAILURE",
             db=db,
         )
         raise HTTPException(
@@ -70,7 +70,7 @@ def _check_dataset_access(
             actor=actor,
             action="ACCESS_DENIED",
             object=path,
-            result="NOT_FOUND",
+            result="FAILURE",
             db=db,
         )
         raise HTTPException(

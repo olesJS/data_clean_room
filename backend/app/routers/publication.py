@@ -64,7 +64,7 @@ def _get_dataset_for_owner(
             actor=actor,
             action="ACCESS_DENIED",
             object=path,
-            result="NOT_FOUND",
+            result="FAILURE",
             db=db,
         )
         raise HTTPException(

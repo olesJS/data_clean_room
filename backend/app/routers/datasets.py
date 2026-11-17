@@ -431,7 +431,7 @@ def _get_accessible_dataset(
             actor=actor,
             action=action,
             object=target_object,
-            result="NOT_FOUND",
+            result="FAILURE",
             db=db,
         )
         raise HTTPException(
