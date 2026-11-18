@@ -1,6 +1,6 @@
 import enum
 import uuid
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
 from sqlalchemy import JSON, Column, Date, DateTime, Float, ForeignKey, Integer, String
 from sqlalchemy import Enum as SQLEnum
@@ -60,6 +60,13 @@ class LegalBasisType(str, enum.Enum):
     LAW = "law"
 
 
+class LegalBasisPurpose(str, enum.Enum):
+    ANALYTICS = "analytics"
+    RESEARCH = "research"
+    REPORTING = "reporting"
+    PUBLICATION = "publication"
+
+
 class LegalBasis(Base):
     """Registry of legal bases (consent, contract, law) for datasets.
 
@@ -85,15 +92,45 @@ class LegalBasis(Base):
     )
     document_ref = Column(String(255), nullable=False)
     date = Column(Date, nullable=False)
+    purpose = Column(
+        SQLEnum(LegalBasisPurpose, name="legal_basis_purpose_enum"),
+        nullable=False,
+    )
+    valid_until = Column(Date, nullable=True)
     entered_by = Column(
         Integer,
         ForeignKey("users.id", ondelete="RESTRICT"),
         nullable=False,
     )
     created_at = Column(DateTime, default=utc_now, nullable=False)
+    revoked_at = Column(DateTime, nullable=True)
+    revoked_by = Column(
+        Integer,
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    revoked_reason = Column(String(500), nullable=True)
 
     dataset = relationship("Dataset", backref="legal_bases")
-    user = relationship("User", backref="entered_legal_bases")
+    user = relationship(
+        "User",
+        foreign_keys=[entered_by],
+        backref="entered_legal_bases",
+    )
+    revoked_by_user = relationship(
+        "User",
+        foreign_keys=[revoked_by],
+        backref="revoked_legal_bases",
+    )
+
+    @property
+    def is_active(self) -> bool:
+        """Whether the legal basis can be used for new governance checks."""
+        if self.revoked_at is not None:
+            return False
+        if self.valid_until is not None and self.valid_until < date.today():
+            return False
+        return True
 
 
 __all__ = [
@@ -102,5 +139,6 @@ __all__ = [
     "AuditLog",
     "Dataset",
     "LegalBasis",
+    "LegalBasisPurpose",
     "LegalBasisType",
 ]
