@@ -81,7 +81,7 @@
 | `id` | `bigserial` | Первинний ключ (PK) |
 | `actor` | `FK users` | **Хто** здійснив дію |
 | `timestamp` | `timestamptz` | **Коли** (UTC) |
-| `action` | `enum` | **Дія:** `LOGIN`, `UPLOAD`, `PUBLISH`, `REQUEST`, `APPROVE`, `DOWNLOAD`, `DENY`, `EXPIRE`, `DELETE`, `CONSENT_REVOKED` |
+| `action` | `enum` | **Дія:** `LOGIN`, `UPLOAD`, `PUBLISH`, `REQUEST`, `REQUEST_APPROVED`, `REQUEST_REJECTED`, `DOWNLOAD`, `DENY`, `EXPIRE`, `DELETE`, `CONSENT_REVOKED` |
 | `object` | `text` | **Об’єкт:** наприклад, `dataset:42`, `request:7`, `user:3` |
 | `result` | `enum` | **Результат:** `success`, `denied` або `failed` |
 | `details` | `jsonb` | Додаткові дані: причина відмови, застосовані методи тощо |
