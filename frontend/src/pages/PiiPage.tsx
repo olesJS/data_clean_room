@@ -333,15 +333,24 @@ export default function PiiPage() {
             Результати PII-сканування: виявлені персональні дані по колонках (UC-04)
           </p>
         </div>
-        <button
-          type="button"
-          className="btn btn--secondary"
-          onClick={loadScan}
-          disabled={loading}
-        >
-          <IconRefresh size={16} />
-          <span>Оновити</span>
-        </button>
+        <div className="pii-header-actions" style={{ display: 'flex', gap: '8px' }}>
+          <Link
+            to={`/datasets/${datasetId}/anonymize`}
+            className="btn btn--primary"
+          >
+            <IconShield size={16} />
+            <span>Анонімізувати</span>
+          </Link>
+          <button
+            type="button"
+            className="btn btn--secondary"
+            onClick={loadScan}
+            disabled={loading}
+          >
+            <IconRefresh size={16} />
+            <span>Оновити</span>
+          </button>
+        </div>
       </div>
 
       {/* Помилка завантаження */}
@@ -523,12 +532,17 @@ export default function PiiPage() {
             </div>
           )}
           {allReviewed && (
-            <div className="alert alert--success">
-              <IconCheck size={16} />
-              <div className="alert__body">
-                <span className="alert__title">Рев'ю завершено</span>
-                <span>Усі PII-знахідки перевірено. Набір готовий до наступного кроку обробки.</span>
+            <div className="alert alert--success" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                <IconCheck size={16} />
+                <div className="alert__body">
+                  <span className="alert__title">Рев'ю завершено</span>
+                  <span>Усі PII-знахідки перевірено. Набір готовий до знеособлення та створення очищеної версії.</span>
+                </div>
               </div>
+              <Link to={`/datasets/${datasetId}/anonymize`} className="btn btn--primary">
+                <span>Перейти до анонімізації</span>
+              </Link>
             </div>
           )}
         </>
