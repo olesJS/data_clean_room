@@ -460,8 +460,8 @@ export default function PublishPage() {
         <div className="gate-checklist" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)', margin: 'var(--space-4) 0' }}>
           {/* 1. Наявність очищеної версії */}
           {(() => {
-            const hasCleanErr = gate?.reasons.some((r) => r.code === 'no_clean_version')
-            const isOk = !hasCleanErr && hasCleanVersion
+            const cleanErr = gate?.reasons.find((r) => r.code === 'no_clean_version')
+            const isOk = !cleanErr && hasCleanVersion
             return (
               <div className={`gate-item ${isOk ? 'gate-item--ok' : 'gate-item--fail'}`} style={{ display: 'flex', alignItems: 'flex-start', gap: '12px', padding: '12px', borderRadius: 'var(--radius-sm)', background: isOk ? 'var(--success-bg)' : 'var(--danger-soft)' }}>
                 {isOk ? (
@@ -476,7 +476,7 @@ export default function PublishPage() {
                   <div style={{ fontSize: '13px', color: isOk ? 'var(--success-text)' : 'var(--danger-text)' }}>
                     {isOk
                       ? 'Очищену копію створено успішно.'
-                      : 'Очищена версія відсутня. Спочатку виконайте знеособлення на сторінці анонімізації.'}
+                      : (cleanErr?.message || 'Очищена версія відсутня. Спочатку виконайте знеособлення на сторінці анонімізації.')}
                   </div>
                 </div>
               </div>
@@ -501,7 +501,9 @@ export default function PublishPage() {
                   <div style={{ fontSize: '13px', color: isOk ? 'var(--success-text)' : 'var(--danger-text)' }}>
                     {isOk
                       ? 'Усі PII-колонки оброблено обраними методами.'
-                      : `Знайдено необроблені PII-колонки: ${(piiErr?.columns ?? []).join(', ')}. Усі персональні дані мають бути знеособлені.`}
+                      : (piiErr?.message
+                          ? `${piiErr.message}${piiErr.columns ? `: ${piiErr.columns.join(', ')}` : ''}`
+                          : `Знайдено необроблені PII-колонки: ${(piiErr?.columns ?? []).join(', ')}. Усі персональні дані мають бути знеособлені.`)}
                   </div>
                 </div>
               </div>
@@ -529,7 +531,9 @@ export default function PublishPage() {
                       ? hmacCols.length > 0
                         ? `Для колонок із HMAC (${hmacCols.join(', ')}) зареєстровано активну правову підставу.`
                         : 'HMAC-псевдонімізація не використовується (або зареєстровано чинну підставу).'
-                      : `Для колонок із HMAC (${hmacCols.join(', ')}) відсутня активна правова підстава! Зареєструйте згоду чи договір вище.`}
+                      : (hmacErr?.message
+                          ? `${hmacErr.message}${hmacErr.legal_basis_reason ? ` (${hmacErr.legal_basis_reason})` : ''}`
+                          : `Для колонок із HMAC (${hmacCols.join(', ')}) відсутня активна правова підстава! Зареєструйте згоду чи договір вище.`)}
                   </div>
                 </div>
               </div>
@@ -538,7 +542,7 @@ export default function PublishPage() {
 
           {/* 4. Термін зберігання */}
           {(() => {
-            const retErr = gate?.reasons.some((r) => r.code === 'retention_required')
+            const retErr = gate?.reasons.find((r) => r.code === 'retention_required')
             const isOk = !retErr && retentionUntil.trim().length > 0
             return (
               <div className={`gate-item ${isOk ? 'gate-item--ok' : 'gate-item--fail'}`} style={{ display: 'flex', alignItems: 'flex-start', gap: '12px', padding: '12px', borderRadius: 'var(--radius-sm)', background: isOk ? 'var(--success-bg)' : 'var(--danger-soft)' }}>
@@ -554,7 +558,7 @@ export default function PublishPage() {
                   <div style={{ fontSize: '13px', color: isOk ? 'var(--success-text)' : 'var(--danger-text)' }}>
                     {isOk
                       ? `Встановлено термін зберігання: ${formatDate(retentionUntil)}.`
-                      : 'Вкажіть коректну дату зберігання у формі вище (дата не раніше ніж завтра).'}
+                      : (retErr?.message || 'Вкажіть коректну дату зберігання у формі вище (дата не раніше ніж завтра).')}
                   </div>
                 </div>
               </div>
