@@ -237,7 +237,7 @@ def approve_exchange_request(
             actor=current_user.email,
             action="DENY",
             object=f"request:{req.id}",
-            result="LEGAL_BASIS_INVALID",
+            result="FAILURE",
             db=db,
         )
         raise HTTPException(
@@ -253,7 +253,7 @@ def approve_exchange_request(
 
     log_event(
         actor=current_user.email,
-        action="APPROVE",
+        action="REQUEST_APPROVED",
         object=f"request:{req.id}",
         result="SUCCESS",
         db=db,
@@ -303,9 +303,9 @@ def reject_exchange_request(
 
     log_event(
         actor=current_user.email,
-        action="DENY",
+        action="REQUEST_REJECTED",
         object=f"request:{req.id}",
-        result="REJECTED_BY_STEWARD",
+        result="SUCCESS",
         db=db,
     )
 
