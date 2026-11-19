@@ -1,7 +1,8 @@
 
 from sqlalchemy.orm import Session
 
-from app.models import Dataset, LegalBasis
+from app.models import Dataset
+from app.services.legal_basis_service import check_legal_basis as verify_legal_basis
 
 
 def check_legal_basis(
@@ -9,16 +10,6 @@ def check_legal_basis(
     purpose: str,
     db: Session,
 ) -> bool:
-    """Checks whether dataset has a valid legal basis for data exchange/processing.
-
-    Must have at least one registered legal basis (Consent, Contract, Law).
-    """
-    legal_basis_entry = (
-        db.query(LegalBasis)
-        .filter(LegalBasis.dataset_id == dataset.id)
-        .first()
-    )
-    if not legal_basis_entry:
-        return False
-
-    return True
+    """Checks whether dataset has a valid legal basis for data exchange/processing."""
+    result = verify_legal_basis(db, dataset, purpose=None)
+    return result.ok

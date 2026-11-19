@@ -52,6 +52,7 @@ def exchange_setup(db_session, tmp_path):
         type=LegalBasisType.CONSENT,
         document_ref="DOC-12345",
         date=date(2024, 1, 1),
+        purpose="research",
         entered_by=steward.id,
     )
     db_session.add(lb)
