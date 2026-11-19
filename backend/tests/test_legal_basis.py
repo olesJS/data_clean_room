@@ -51,6 +51,8 @@ def test_create_and_get_legal_basis_success(
         "type": "consent",
         "document_ref": "DOC-CONSENT-2026-001",
         "date": "2026-10-24",
+        "purpose": "analytics",
+        "valid_until": "2027-12-31",
     }
 
     post_res = client.post(
@@ -64,6 +66,12 @@ def test_create_and_get_legal_basis_success(
     assert data["type"] == "consent"
     assert data["document_ref"] == "DOC-CONSENT-2026-001"
     assert data["date"] == "2026-10-24"
+    assert data["purpose"] == "analytics"
+    assert data["valid_until"] == "2027-12-31"
+    assert data["revoked_at"] is None
+    assert data["revoked_by"] is None
+    assert data["revoked_reason"] is None
+    assert data["is_active"] is True
     assert "id" in data
     assert data["entered_by"] > 0
 
@@ -95,6 +103,7 @@ def test_steward_can_create_and_get_legal_basis(
         "type": "law",
         "document_ref": "LAW-2026-001",
         "date": "2026-10-24",
+        "purpose": "publication",
     }
 
     post_res = client.post(
@@ -122,6 +131,7 @@ def test_consumer_cannot_create_legal_basis(
             "type": "contract",
             "document_ref": "CONTRACT-101",
             "date": "2026-10-24",
+            "purpose": "reporting",
         },
         headers={"Authorization": f"Bearer {consumer_token}"},
     )
@@ -147,6 +157,7 @@ def test_consumer_forbidden_before_dataset_lookup_on_post(
             "type": "law",
             "document_ref": "LAW-123",
             "date": "2026-10-24",
+            "purpose": "research",
         },
         headers={"Authorization": f"Bearer {consumer_token}"},
     )
@@ -184,6 +195,7 @@ def test_provider_non_owner_gets_404_on_post(client, db_session):
             "type": "contract",
             "document_ref": "CONTRACT-202",
             "date": "2026-10-24",
+            "purpose": "analytics",
         },
         headers={"Authorization": f"Bearer {other_provider_token}"},
     )
@@ -197,6 +209,7 @@ def test_create_legal_basis_dataset_not_found(client, provider_token):
             "type": "law",
             "document_ref": "LAW-123",
             "date": "2026-10-24",
+            "purpose": "research",
         },
         headers={"Authorization": f"Bearer {provider_token}"},
     )

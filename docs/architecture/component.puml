@@ -1,0 +1,119 @@
+@startuml
+!pragma layout smetana
+skinparam componentStyle rectangle
+skinparam roundcorner 8
+skinparam shadowing false
+skinparam defaultFontName "Segoe UI", Arial, sans-serif
+skinparam component {
+    BackgroundColor #FFFFFF
+    BorderColor #2C3E50
+}
+skinparam database {
+    BackgroundColor #ECEFF1
+    BorderColor #2C3E50
+}
+skinparam node {
+    BackgroundColor #F8F9F9
+    BorderColor #95A5A6
+}
+skinparam package {
+    BackgroundColor #FDFEFE
+    BorderColor #BDC3C7
+}
+skinparam folder {
+    BackgroundColor #FEF9E7
+    BorderColor #B7950B
+}
+skinparam arrowColor #2C3E50
+
+title Data Clean Room - Component Diagram (Sprint 3, SCRUM-71)
+
+actor "User\n(Provider / Consumer / Steward)" as User
+
+package "Browser" {
+    [React SPA\nTypeScript + Vite] as SPA
+}
+
+node "frontend container\nnginx:1.27-alpine :80" {
+    [nginx\nstatic SPA + /api reverse proxy] as Nginx
+}
+
+node "backend container\npython:3.11-slim, uvicorn :8000" {
+    [FastAPI app\napp/main.py] as API
+
+    package "Routers" {
+        [auth\n/login, /me] as AuthR
+        [datasets\nupload, profile, PII] as DatasetsR
+        [legal_basis\ncreate, list, revoke] as LegalR
+        [audit\n/audit] as AuditR
+    }
+
+    package "Domain services" {
+        [auth.py\nJWT HS256 + bcrypt] as AuthSvc
+        [audit.py\nlog_event] as AuditSvc
+        [profiler.py\nprofile + PII detection] as Profiler
+        [quality_engine.py\nYAML rules + Quality Score] as Quality
+        [legal_basis_service.py\ncheck_legal_basis] as LegalSvc <<planned: SCRUM-58>>
+        [anonymizer.py\nHMAC pseudonymization] as Anon <<planned: SCRUM-55>>
+        [publication_gate.py] as Gate <<planned: SCRUM-57>>
+        [exchange_service.py\nrequests / approve / download] as Exchange <<planned: SCRUM-56>>
+    }
+
+    [SQLAlchemy ORM\nmodels.py + schemas] as ORM
+}
+
+database "PostgreSQL 15\napp_db" as DB {
+    [users]
+    [datasets]
+    [legal_basis]
+    [audit_logs]
+}
+
+folder "Bind mount ./data -> /app/data (ro)\nYAML rules + PII dictionaries" as DataMount
+folder "storage/datasets\ncontainer filesystem\nno volume: lost on recreate" as Storage
+
+User --> SPA : HTTP
+SPA --> Nginx : HTTP/JSON
+Nginx --> API : /api/* -> backend:8000
+API --> AuthR
+API --> DatasetsR
+API --> LegalR
+API --> AuditR
+AuthR --> AuthSvc
+AuthR --> AuditSvc
+DatasetsR --> Profiler
+DatasetsR --> Quality
+Profiler --> Quality
+DatasetsR --> Storage : write raw file
+Profiler --> DataMount : read dictionaries
+Quality --> DataMount : read YAML rules
+LegalR --> LegalSvc
+DatasetsR --> Anon
+DatasetsR --> Gate
+API --> Exchange
+AuthR --> ORM
+DatasetsR --> ORM
+LegalR --> ORM
+AuditR --> ORM
+Exchange --> ORM
+AuditSvc --> ORM
+ORM --> DB : SQL via psycopg
+
+note right of LegalSvc
+  Planned in PR #30 (SCRUM-58).
+  Not present in main yet.
+end note
+
+note right of Anon
+  Planned SCRUM-55.
+end note
+
+note right of Gate
+  Planned SCRUM-57.
+end note
+
+note right of Exchange
+  Planned SCRUM-56 (Nazar / backend).
+end note
+
+@enduml
