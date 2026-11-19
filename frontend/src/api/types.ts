@@ -166,3 +166,134 @@ export interface QualityReport {
   summary?: { duplicate_rows_count?: number }
   violations: QualityViolation[]
 }
+
+// ─── Sprint 3: Анонімізація «до/після» (UC-06, SCRUM-61) ───────────────────────
+
+export type AnonymizationMethodName = 'mask' | 'generalize' | 'hmac' | 'redact'
+
+export const ANONYMIZATION_METHOD_LABELS: Record<AnonymizationMethodName, string> = {
+  mask: 'Маскування (***)',
+  generalize: 'Узагальнення',
+  hmac: 'HMAC (псевдонімізація)',
+  redact: 'Видалення колонки (не підтримується бекендом)',
+}
+
+export interface AnonymizationColumn {
+  column_name: string
+  pii_type: string
+  method: AnonymizationMethodName
+}
+
+export interface AnonymizationPreviewRow {
+  row_index: number
+  original: Record<string, string>
+  anonymized: Record<string, string>
+}
+
+export interface AnonymizationPreview {
+  dataset_id: number
+  dataset_name?: string
+  pii_columns_count: number
+  estimated_class: DataClass
+  hmac_requires_legal_basis?: boolean
+  method_counts?: Record<string, number>
+  columns: AnonymizationColumn[]
+  sample_rows?: Record<string, string>[]
+  preview_pairs?: AnonymizationPreviewRow[]
+}
+
+export interface AnonymizedVersion {
+  dataset_id: number
+  version_id: number
+  version_number: number
+  kind: 'clean'
+  file_name: string
+  row_count: number
+  sha256: string
+  data_class: DataClass
+  created_at: string
+}
+
+// ─── Sprint 3: Публікація та правові підстави (UC-07, SCRUM-62) ───────────────
+
+export type LegalBasisType = 'consent' | 'contract' | 'law'
+export type LegalBasisPurpose = 'analytics' | 'research' | 'reporting' | 'publication'
+
+export const LEGAL_BASIS_TYPE_LABELS: Record<LegalBasisType, string> = {
+  consent: 'Згода суб’єкта (Consent)',
+  contract: 'Договір (Contract)',
+  law: 'Закон / обов’язок (Legal obligation)',
+}
+
+export const LEGAL_BASIS_PURPOSE_LABELS: Record<LegalBasisPurpose, string> = {
+  analytics: 'Аналітика',
+  research: 'Наукові дослідження',
+  reporting: 'Звітність',
+  publication: 'Публічний доступ',
+}
+
+export interface LegalBasis {
+  id: string
+  dataset_id: number
+  type: LegalBasisType
+  document_ref: string
+  date: string
+  purpose: LegalBasisPurpose
+  valid_until: string | null
+  entered_by: number
+  created_at: string
+  revoked_at: string | null
+  revoked_by: number | null
+  revoked_reason: string | null
+  is_active: boolean
+}
+
+export interface LegalBasisCreatePayload {
+  type: LegalBasisType
+  document_ref: string
+  date: string
+  purpose: LegalBasisPurpose
+  valid_until?: string | null
+}
+
+export interface DatasetVersionInfo {
+  id: number
+  kind: 'raw' | 'clean'
+  version_number: number
+  file_name: string
+  file_type: string
+  file_size: number
+  row_count: number
+  sha256: string
+  data_class: DataClass | null
+  created_by: string
+  created_at: string
+}
+
+export interface PublicationReason {
+  code: string
+  short_code: string
+  message: string
+  columns?: string[]
+  legal_basis_reason?: string
+}
+
+export interface PublicationCheck {
+  allowed: boolean
+  reasons: PublicationReason[]
+  new_class: DataClass
+  hmac_columns: string[]
+  missing_columns: string[]
+  clean_version_id: number | null
+}
+
+export interface PublishResult {
+  dataset_id: number
+  status: string
+  data_class: DataClass
+  published_at: string
+  published_by: string
+  retention_until: string
+  gate: PublicationCheck
+}
+
