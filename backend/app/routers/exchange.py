@@ -231,8 +231,9 @@ def approve_exchange_request(
             detail=f"Request is already resolved with status {req.status.value}",
         )
 
-    # Check legal basis
-    if not check_legal_basis(req.dataset, req.purpose, db):
+    # Check legal basis with purpose matching
+    lb_check = check_legal_basis(req.dataset, req.purpose, db)
+    if not lb_check.ok:
         log_event(
             actor=current_user.email,
             action="DENY",
@@ -240,9 +241,10 @@ def approve_exchange_request(
             result="FAILURE",
             db=db,
         )
+        detail_msg = f"Cannot approve request: legal basis invalid ({lb_check.reason})"
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Cannot approve request: no valid legal basis found for dataset",
+            detail=detail_msg,
         )
 
     req.status = ExchangeRequestStatus.APPROVED
@@ -355,10 +357,12 @@ def download_clean_dataset(
         )
 
     # Re-check legal basis before download
-    if not check_legal_basis(req.dataset, req.purpose, db):
+    lb_check = check_legal_basis(req.dataset, req.purpose, db)
+    if not lb_check.ok:
+        err_msg = f"Legal basis is no longer valid ({lb_check.reason})"
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Legal basis is no longer valid for this dataset",
+            detail=err_msg,
         )
 
     # Locate clean DatasetVersion (RAW is NEVER served!)

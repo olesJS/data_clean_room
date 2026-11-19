@@ -69,10 +69,26 @@ def upgrade() -> None:
     ),
     sa.Column('document_ref', sa.String(length=255), nullable=False),
     sa.Column('date', sa.Date(), nullable=False),
+    sa.Column(
+        'purpose',
+        sa.Enum(
+            'ANALYTICS',
+            'RESEARCH',
+            'REPORTING',
+            'PUBLICATION',
+            name='legal_basis_purpose_enum',
+        ),
+        nullable=False,
+    ),
+    sa.Column('valid_until', sa.Date(), nullable=True),
     sa.Column('entered_by', sa.Integer(), nullable=False),
     sa.Column('created_at', sa.DateTime(), nullable=False),
+    sa.Column('revoked_at', sa.DateTime(), nullable=True),
+    sa.Column('revoked_by', sa.Integer(), nullable=True),
+    sa.Column('revoked_reason', sa.String(length=500), nullable=True),
     sa.ForeignKeyConstraint(['dataset_id'], ['datasets.id'], ondelete='CASCADE'),
     sa.ForeignKeyConstraint(['entered_by'], ['users.id'], ondelete='RESTRICT'),
+    sa.ForeignKeyConstraint(['revoked_by'], ['users.id'], ondelete='SET NULL'),
     sa.PrimaryKeyConstraint('id')
     )
     op.create_index(
