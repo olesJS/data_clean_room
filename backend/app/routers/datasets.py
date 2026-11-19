@@ -1,3 +1,4 @@
+import hashlib
 import io
 import json
 import logging
@@ -20,7 +21,7 @@ from sqlalchemy.orm import Session
 from app.audit import log_event
 from app.auth import get_current_user, require_role
 from app.database import get_db
-from app.models import Dataset, User
+from app.models import Dataset, DatasetVersion, DatasetVersionKind, User
 from app.profiler import profile_dataframe
 from app.schemas import (
     DatasetProfileResponse,
@@ -272,6 +273,19 @@ async def upload_dataset(
     db.commit()
     db.refresh(dataset)
 
+    # 6a. Compute sha256 and create initial raw DatasetVersion
+    raw_sha256 = hashlib.sha256(content).hexdigest()
+    raw_version = DatasetVersion(
+        dataset_id=dataset.id,
+        kind=DatasetVersionKind.RAW,
+        file_path=saved_file_path,
+        sha256=raw_sha256,
+        row_count=row_count,
+        created_by=current_user.id,
+    )
+    db.add(raw_version)
+    db.commit()
+
     # 6b. Run profiling immediately after saving
     try:
         profile = profile_dataframe(df, dataset.id, dataset.name)
@@ -282,6 +296,15 @@ async def upload_dataset(
         dataset.pii_json = profile.get("pii_findings", pii_cols)
         db.commit()
         db.refresh(dataset)
+
+        # Log PII_SCAN event after profiling completes
+        log_event(
+            actor=actor,
+            action="PII_SCAN",
+            object=f"dataset:{dataset.id}:{dataset.name}",
+            result="SUCCESS",
+            db=db,
+        )
     except Exception as exc:
         logger.warning(
             "Could not profile dataset %d: %s", dataset.id, exc, exc_info=True
@@ -312,6 +335,17 @@ def list_datasets(
             .order_by(Dataset.created_at.desc())
             .all()
         )
+    elif current_user.role == "DataConsumer":
+        # Data Consumer only sees published datasets; unpublished/raw are forbidden
+        if hasattr(Dataset, "status"):
+            datasets = (
+                db.query(Dataset)
+                .filter(getattr(Dataset, "status") == "published")
+                .order_by(Dataset.created_at.desc())
+                .all()
+            )
+        else:
+            datasets = []
     else:
         datasets = db.query(Dataset).order_by(Dataset.created_at.desc()).all()
 
@@ -397,7 +431,7 @@ def _get_accessible_dataset(
             actor=actor,
             action=action,
             object=target_object,
-            result="NOT_FOUND",
+            result="FAILURE",
             db=db,
         )
         raise HTTPException(
@@ -500,7 +534,7 @@ def get_dataset_pii(
 
     log_event(
         actor=current_user.email,
-        action="GET_DATASET_PII",
+        action="VIEW_PII",
         object=f"dataset:{dataset.id}:{dataset.name}",
         result="SUCCESS",
         db=db,

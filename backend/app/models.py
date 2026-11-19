@@ -2,7 +2,16 @@ import enum
 import uuid
 from datetime import date, datetime, timezone
 
-from sqlalchemy import JSON, Column, Date, DateTime, Float, ForeignKey, Integer, String
+from sqlalchemy import (
+    JSON,
+    Column,
+    Date,
+    DateTime,
+    Float,
+    ForeignKey,
+    Integer,
+    String,
+)
 from sqlalchemy import Enum as SQLEnum
 from sqlalchemy.orm import relationship
 
@@ -52,6 +61,7 @@ class Dataset(Base):
     quality_score = Column(Float, nullable=True)
     profile_json = Column(JSON, nullable=True)
     pii_json = Column(JSON, nullable=True)
+    status = Column(String(50), default="uploaded", nullable=False)
 
 
 class LegalBasisType(str, enum.Enum):
@@ -133,12 +143,144 @@ class LegalBasis(Base):
         return True
 
 
+class DatasetVersionKind(str, enum.Enum):
+    RAW = "raw"
+    CLEAN = "clean"
+
+
+class DatasetVersion(Base):
+    """Stores versions of datasets (raw uploaded vs clean/anonymized)."""
+
+    __tablename__ = "dataset_versions"
+    __table_args__ = (
+        # At most one raw version per dataset is allowed
+        # (clean versions can be replaced or multiple depending on pipeline)
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    dataset_id = Column(
+        Integer,
+        ForeignKey("datasets.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    kind = Column(
+        SQLEnum(DatasetVersionKind, name="dataset_version_kind_enum"),
+        nullable=False,
+    )
+    file_path = Column(String(500), nullable=False)
+    sha256 = Column(String(64), nullable=False)
+    row_count = Column(Integer, nullable=False)
+    created_by = Column(
+        Integer,
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    created_at = Column(DateTime, default=utc_now, nullable=False)
+
+    dataset = relationship("Dataset", backref="versions")
+    creator = relationship("User", backref="created_dataset_versions")
+
+
+class AnonymizationMethodType(str, enum.Enum):
+    MASK = "mask"
+    GENERALIZE = "generalize"
+    HMAC = "hmac"
+
+
+class AnonymizationMethod(Base):
+    """Tracks applied anonymization methods per column for dataset versions."""
+
+    __tablename__ = "anonymization_methods"
+
+    id = Column(Integer, primary_key=True, index=True)
+    dataset_id = Column(
+        Integer,
+        ForeignKey("datasets.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    column_name = Column(String(255), nullable=False)
+    method = Column(
+        SQLEnum(AnonymizationMethodType, name="anonymization_method_enum"),
+        nullable=False,
+    )
+    params = Column(JSON, nullable=True)
+    applied_by = Column(
+        Integer,
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    applied_at = Column(DateTime, default=utc_now, nullable=False)
+
+    dataset = relationship("Dataset", backref="anonymization_methods")
+    user = relationship("User", backref="applied_anonymizations")
+
+
+class ExchangeRequestStatus(str, enum.Enum):
+    PENDING = "pending"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+
+
+class ExchangeRequest(Base):
+    """Consumer requests to access and download clean anonymized datasets."""
+
+    __tablename__ = "exchange_requests"
+
+    id = Column(Integer, primary_key=True, index=True)
+    dataset_id = Column(
+        Integer,
+        ForeignKey("datasets.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    consumer_id = Column(
+        Integer,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    purpose = Column(String(500), nullable=False)
+    status = Column(
+        SQLEnum(ExchangeRequestStatus, name="exchange_request_status_enum"),
+        default=ExchangeRequestStatus.PENDING,
+        nullable=False,
+    )
+    reviewed_by = Column(
+        Integer,
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    review_comment = Column(String(500), nullable=True)
+    created_at = Column(DateTime, default=utc_now, nullable=False)
+    reviewed_at = Column(DateTime, nullable=True)
+
+    dataset = relationship("Dataset", backref="exchange_requests")
+    consumer = relationship(
+        "User",
+        foreign_keys=[consumer_id],
+        backref="exchange_requests",
+    )
+    reviewer = relationship(
+        "User",
+        foreign_keys=[reviewed_by],
+        backref="reviewed_exchange_requests",
+    )
+
+
 __all__ = [
     "Base",
     "User",
     "AuditLog",
     "Dataset",
+    "DatasetVersion",
+    "DatasetVersionKind",
+    "AnonymizationMethod",
+    "AnonymizationMethodType",
     "LegalBasis",
     "LegalBasisPurpose",
     "LegalBasisType",
+    "ExchangeRequest",
+    "ExchangeRequestStatus",
 ]

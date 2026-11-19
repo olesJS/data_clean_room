@@ -524,6 +524,18 @@ def profile_dataframe(
         col_mean: float | None = None
         outliers_count = 0
         histogram: dict[str, Any] | None = None
+        future_dates_count = 0
+
+        # Check date columns for future dates
+        col_name_lower = str(col).lower()
+        if "date" in col_name_lower or "дата" in col_name_lower:
+            try:
+                date_s = pd.to_datetime(non_null_s, errors="coerce", utc=True)
+                valid_dates = date_s.dropna()
+                now_utc = datetime.now(timezone.utc)
+                future_dates_count = int((valid_dates > now_utc).sum())
+            except Exception:
+                future_dates_count = 0
 
         if pd.api.types.is_numeric_dtype(series) and len(non_null_s) > 0:
             numeric_s = pd.to_numeric(non_null_s, errors="coerce").dropna()
@@ -570,6 +582,7 @@ def profile_dataframe(
                 "max": col_max,
                 "mean": col_mean,
                 "outliers_count": outliers_count,
+                "future_dates_count": future_dates_count,
                 "histogram": histogram,
             }
         )
