@@ -176,6 +176,7 @@ export default function AnonymizePage() {
 
   // Зміна методу для конкретної колонки
   const handleMethodChange = (columnName: string, method: AnonymizationMethodName) => {
+    if (method === 'redact') return
     setMethods((prev) => ({
       ...prev,
       [columnName]: method,
@@ -453,7 +454,12 @@ export default function AnonymizePage() {
                           >
                             {(Object.keys(ANONYMIZATION_METHOD_LABELS) as AnonymizationMethodName[]).map(
                               (m) => (
-                                <option key={m} value={m}>
+                                <option
+                                  key={m}
+                                  value={m}
+                                  disabled={m === 'redact'}
+                                  title={m === 'redact' ? 'Метод redact (видалення колонки) наразі не підтримується рушієм анонімізації бекенду' : undefined}
+                                >
                                   {ANONYMIZATION_METHOD_LABELS[m]}
                                 </option>
                               ),
@@ -530,76 +536,82 @@ export default function AnonymizePage() {
                 </div>
               </div>
 
-              {preview.preview_pairs && preview.preview_pairs.length > 0 ? (
-                <div className="table-wrap diff-table-wrap">
-                  <table className="table diff-table">
-                    <thead>
-                      <tr>
-                        <th scope="col" style={{ width: '48px' }}>#</th>
-                        {findings.map((f) => (
-                          <th key={f.column_name} scope="col" colSpan={2} style={{ textAlign: 'center', borderLeft: '1px solid var(--color-line)' }}>
-                            <span className="col-name-mono">{f.column_name}</span>
-                            <div className="caption cell-muted" style={{ fontWeight: 'normal', fontSize: '11px' }}>
-                              метод: {ANONYMIZATION_METHOD_LABELS[methods[f.column_name] ?? 'mask']}
-                            </div>
-                          </th>
-                        ))}
-                      </tr>
-                      <tr className="diff-sub-header">
-                        <th style={{ width: '48px' }} />
-                        {findings.map((f) => (
-                          <th key={`sub-${f.column_name}`} colSpan={2} style={{ padding: 0, borderLeft: '1px solid var(--color-line)' }}>
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', textAlign: 'center', fontSize: '11px' }}>
-                              <span style={{ padding: '4px', background: 'var(--color-light)' }}>До</span>
-                              <span style={{ padding: '4px', background: 'var(--sky-bg)', color: 'var(--sky-text)' }}>Після</span>
-                            </div>
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {preview.preview_pairs.map((row) => (
-                        <tr key={row.row_index}>
-                          <td className="cell-muted" style={{ fontSize: '12px', textAlign: 'center' }}>
-                            {row.row_index}
-                          </td>
-                          {findings.map((f) => {
-                            const origVal = row.original[f.column_name] ?? '—'
-                            const anonVal = row.anonymized[f.column_name] ?? '—'
-                            const isChanged = origVal !== anonVal
+              {preview.preview_pairs && preview.preview_pairs.length > 0 ? (() => {
+                const previewCols: string[] = preview.columns && preview.columns.length > 0
+                  ? preview.columns.map((c) => c.column_name)
+                  : findings.map((f) => f.column_name)
 
-                            return (
-                              <td key={`${row.row_index}-${f.column_name}`} colSpan={2} style={{ padding: 0, borderLeft: '1px solid var(--color-line)' }}>
-                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', minHeight: '36px', alignItems: 'center' }}>
-                                  <div className="cell-original" style={{ padding: '6px 8px', fontSize: '13px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={origVal}>
-                                    {origVal}
-                                  </div>
-                                  <div
-                                    className={`cell-anonymized ${isChanged ? 'cell-diff' : ''}`}
-                                    style={{
-                                      padding: '6px 8px',
-                                      fontSize: '13px',
-                                      overflow: 'hidden',
-                                      textOverflow: 'ellipsis',
-                                      whiteSpace: 'nowrap',
-                                      background: isChanged ? 'var(--sky-bg)' : 'transparent',
-                                      color: isChanged ? 'var(--sky-text)' : 'inherit',
-                                      fontWeight: isChanged ? 600 : 'normal',
-                                    }}
-                                    title={anonVal}
-                                  >
-                                    {anonVal}
-                                  </div>
-                                </div>
-                              </td>
-                            )
-                          })}
+                return (
+                  <div className="table-wrap diff-table-wrap">
+                    <table className="table diff-table">
+                      <thead>
+                        <tr>
+                          <th scope="col" style={{ width: '48px' }}>#</th>
+                          {previewCols.map((colName) => (
+                            <th key={colName} scope="col" colSpan={2} style={{ textAlign: 'center', borderLeft: '1px solid var(--color-line)' }}>
+                              <span className="col-name-mono">{colName}</span>
+                              <div className="caption cell-muted" style={{ fontWeight: 'normal', fontSize: '11px' }}>
+                                метод: {ANONYMIZATION_METHOD_LABELS[methods[colName] ?? 'mask']}
+                              </div>
+                            </th>
+                          ))}
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              ) : (
+                        <tr className="diff-sub-header">
+                          <th style={{ width: '48px' }} />
+                          {previewCols.map((colName) => (
+                            <th key={`sub-${colName}`} colSpan={2} style={{ padding: 0, borderLeft: '1px solid var(--color-line)' }}>
+                              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', textAlign: 'center', fontSize: '11px' }}>
+                                <span style={{ padding: '4px', background: 'var(--color-light)' }}>До</span>
+                                <span style={{ padding: '4px', background: 'var(--sky-bg)', color: 'var(--sky-text)' }}>Після</span>
+                              </div>
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {preview.preview_pairs.map((row) => (
+                          <tr key={row.row_index}>
+                            <td className="cell-muted" style={{ fontSize: '12px', textAlign: 'center' }}>
+                              {row.row_index}
+                            </td>
+                            {previewCols.map((colName) => {
+                              const origVal = row.original[colName] ?? '—'
+                              const anonVal = row.anonymized[colName] ?? '—'
+                              const isChanged = origVal !== anonVal
+
+                              return (
+                                <td key={`${row.row_index}-${colName}`} colSpan={2} style={{ padding: 0, borderLeft: '1px solid var(--color-line)' }}>
+                                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', minHeight: '36px', alignItems: 'center' }}>
+                                    <div className="cell-original" style={{ padding: '6px 8px', fontSize: '13px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={origVal}>
+                                      {origVal}
+                                    </div>
+                                    <div
+                                      className={`cell-anonymized ${isChanged ? 'cell-diff' : ''}`}
+                                      style={{
+                                        padding: '6px 8px',
+                                        fontSize: '13px',
+                                        overflow: 'hidden',
+                                        textOverflow: 'ellipsis',
+                                        whiteSpace: 'nowrap',
+                                        background: isChanged ? 'var(--sky-bg)' : 'transparent',
+                                        color: isChanged ? 'var(--sky-text)' : 'inherit',
+                                        fontWeight: isChanged ? 600 : 'normal',
+                                      }}
+                                      title={anonVal}
+                                    >
+                                      {anonVal}
+                                    </div>
+                                  </div>
+                                </td>
+                              )
+                            })}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )
+              })() : (
                 <p className="cell-muted">Дані для попереднього перегляду відсутні.</p>
               )}
 

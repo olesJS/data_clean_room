@@ -175,7 +175,7 @@ export const ANONYMIZATION_METHOD_LABELS: Record<AnonymizationMethodName, string
   mask: 'Маскування (***)',
   generalize: 'Узагальнення',
   hmac: 'HMAC (псевдонімізація)',
-  redact: 'Видалення колонки',
+  redact: 'Видалення колонки (не підтримується бекендом)',
 }
 
 export interface AnonymizationColumn {
