@@ -46,7 +46,7 @@ def _get_visible_dataset(
             actor=current_user.email,
             action=action,
             object=f"dataset:{dataset_id}",
-            result="NOT_FOUND",
+            result="FAILURE",
             db=db,
         )
         raise HTTPException(

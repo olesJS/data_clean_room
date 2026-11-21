@@ -30,11 +30,14 @@ def test_login_creates_audit_record(client, db_session):
     )
     failed_log = (
         db_session.query(AuditLog)
-        .filter(AuditLog.actor == "provider@example.com", AuditLog.result == "FAILURE")
+        .filter(
+            AuditLog.actor == "provider@example.com",
+            AuditLog.action == "LOGIN",
+            AuditLog.result == "FAILURE",
+        )
         .first()
     )
     assert failed_log is not None
-    assert failed_log.action == "LOGIN"
 
     # Successful login attempt
     client.post(

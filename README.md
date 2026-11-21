@@ -42,17 +42,29 @@ Data Clean Room об'єднує backend на FastAPI, frontend на React і Pos
 
 ### Запуск повного стеку
 
+1. Клонуйте репозиторій та перейдіть у каталог проєкту:
 ```bash
 git clone https://github.com/olesJS/data_clean_room.git
 cd data_clean_room
+```
+
+2. Створіть `.env` файл на основі `.env.example` та згенеруйте криптографічно стійкий `HMAC_KEY`:
+```bash
+cp .env.example .env
+python -c "import secrets; print('HMAC_KEY=' + secrets.token_hex(32))" >> .env
+```
+
+3. Запустіть сервіси через Docker Compose:
+```bash
 docker compose up --build -d
 ```
 
-Конфігурація розробки за замовчуванням визначена у `docker-compose.yml`. Щоб перевизначити її локально, створіть `.env`:
-
-```bash
-cp .env.example .env
-```
+> [!NOTE]
+> При першому розгортанні або після оновлення схеми міграціями (якщо база вже була ініціалізована локально) виконайте:
+> ```bash
+> docker compose down -v
+> docker compose up --build -d
+> ```
 
 ### Зупинка стеку
 
@@ -84,6 +96,19 @@ cd backend
 python -m pip install -r requirements.txt
 ruff check .
 pytest
+```
+
+#### Міграції бази даних (Alembic)
+
+Міграції застосовуються автоматично у Docker перед стартом бекенду. Для ручного керування міграціями:
+
+```bash
+cd backend
+# Застосувати всі міграції до останньої версії:
+alembic upgrade head
+
+# Створити нову міграцію після зміни моделей:
+alembic revision --autogenerate -m "опис_змін"
 ```
 
 Запуск API локально:
