@@ -39,6 +39,7 @@ export default function CatalogPage() {
   // Request Access Modal State
   const [selectedDataset, setSelectedDataset] = useState<CatalogItem | null>(null)
   const [selectedPurpose, setSelectedPurpose] = useState<LegalBasisPurpose>('analytics')
+  const [purposeDetails, setPurposeDetails] = useState('')
   const [requestSubmitting, setRequestSubmitting] = useState(false)
   const [requestError, setRequestError] = useState<string | null>(null)
   const [requestSuccess, setRequestSuccess] = useState<string | null>(null)
@@ -78,6 +79,7 @@ export default function CatalogPage() {
   const openRequestModal = (item: CatalogItem) => {
     setSelectedDataset(item)
     setSelectedPurpose('analytics')
+    setPurposeDetails('')
     setRequestError(null)
     setRequestSuccess(null)
   }
@@ -85,6 +87,7 @@ export default function CatalogPage() {
   const closeRequestModal = () => {
     if (requestSubmitting) return
     setSelectedDataset(null)
+    setPurposeDetails('')
     setRequestError(null)
     setRequestSuccess(null)
   }
@@ -94,7 +97,11 @@ export default function CatalogPage() {
     setRequestSubmitting(true)
     setRequestError(null)
     try {
-      await createExchangeRequest(selectedDataset.id, selectedPurpose)
+      // Backend вимагає purpose min_length=10 і відповідність категорії
+      const finalPurpose = purposeDetails.trim()
+        ? `${selectedPurpose}: ${purposeDetails.trim()}`
+        : `Цільове використання: ${selectedPurpose} (обробка згідно з регламентом)`
+      await createExchangeRequest(selectedDataset.id, finalPurpose)
       setRequestSuccess(`Запит на доступ до набору «${selectedDataset.name}» успішно надіслано!`)
     } catch (err) {
       setRequestError(err instanceof Error ? err.message : 'Не вдалося надіслати запит на доступ')
@@ -300,8 +307,23 @@ export default function CatalogPage() {
                       ))}
                     </select>
                     <p className="form-hint">
-                      Вкажіть мету використання даних відповідно до вимог комплаєнсу та GDPR.
+                      Вкажіть категорію мети використання даних відповідно до вимог комплаєнсу та GDPR.
                     </p>
+                  </div>
+
+                  <div className="form-group" style={{ marginTop: 'var(--space-3)' }}>
+                    <label htmlFor="request-details" className="form-label">
+                      Деталізація мети / обґрунтування (необовʼязково)
+                    </label>
+                    <textarea
+                      id="request-details"
+                      className="form-textarea"
+                      rows={2}
+                      placeholder="Наприклад: Аналіз клієнтських сегментів для підготовки звіту за Q4"
+                      value={purposeDetails}
+                      onChange={(e) => setPurposeDetails(e.target.value)}
+                      disabled={requestSubmitting}
+                    />
                   </div>
 
                   <div className="compliance-notice" style={{ marginTop: 'var(--space-4)' }}>
