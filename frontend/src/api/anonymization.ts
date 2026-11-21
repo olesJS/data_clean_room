@@ -24,7 +24,7 @@ export async function previewAnonymization(
   }
 
   // Надсилаємо лише columns — стандартний контракт #43
-  const raw = await request<Record<string, unknown>>(endpoints.anonymizePreview(datasetId), {
+  const raw = await request<Record<string, unknown>>(endpoints.datasetAnonymizePreview(datasetId), {
     method: 'POST',
     body: {
       columns: methods,
@@ -32,7 +32,6 @@ export async function previewAnonymization(
   })
 
   const hasHmac = Object.values(methods).some((m) => m.toLowerCase().includes('hmac'))
-  const fallbackClass: DataClass = hasHmac ? 'Personal' : 'Confidential'
 
   // Випадок 1: Формат бекенду #43: columns = { [colName]: { before: [...], after: [...] } }
   if (
@@ -75,7 +74,7 @@ export async function previewAnonymization(
       dataset_id: Number(raw.dataset_id ?? datasetId),
       dataset_name: (raw.dataset_name as string) || undefined,
       pii_columns_count: colEntries.length,
-      estimated_class: (raw.estimated_class as DataClass) || fallbackClass,
+      estimated_class: (raw.estimated_class as DataClass) || undefined,
       hmac_requires_legal_basis: Boolean(raw.hmac_requires_legal_basis ?? hasHmac),
       columns: columnsList,
       preview_pairs: previewPairs,
@@ -95,7 +94,7 @@ export async function previewAnonymization(
     dataset_id: Number(raw.dataset_id ?? datasetId),
     dataset_name: (raw.dataset_name as string) || undefined,
     pii_columns_count: Number(raw.pii_columns_count ?? columnsList.length),
-    estimated_class: (raw.estimated_class as DataClass) || fallbackClass,
+    estimated_class: (raw.estimated_class as DataClass) || undefined,
     hmac_requires_legal_basis: Boolean(raw.hmac_requires_legal_basis ?? hasHmac),
     columns: columnsList,
     sample_rows: raw.sample_rows as Record<string, string>[] | undefined,
@@ -116,14 +115,13 @@ export async function applyAnonymization(
     return mockApplyAnonymization(datasetId, methods)
   }
 
-  const raw = await request<Record<string, unknown>>(endpoints.anonymize(datasetId), {
+  const raw = await request<Record<string, unknown>>(endpoints.datasetAnonymize(datasetId), {
     method: 'POST',
     body: {
       columns: methods,
     },
   })
 
-  const hasHmac = Object.values(methods).some((m) => m.toLowerCase().includes('hmac'))
   const sha = (raw.clean_sha256 as string) || (raw.sha256 as string) || ''
 
   return {
@@ -134,7 +132,7 @@ export async function applyAnonymization(
     file_name: (raw.file_name as string) || undefined,
     row_count: Number(raw.row_count ?? 0),
     sha256: sha,
-    data_class: (raw.data_class as DataClass) || (hasHmac ? 'Personal' : 'Confidential'),
+    data_class: (raw.data_class as DataClass) || undefined,
     status: (raw.status as string) || undefined,
     applied_columns: raw.applied_columns as string[] | Record<string, string> | undefined,
     created_at: (raw.created_at as string) || new Date().toISOString(),

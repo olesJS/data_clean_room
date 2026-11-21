@@ -18,8 +18,6 @@ export const endpoints = {
   datasetPiiColumn: (id: number | string, col: string) => `/api/datasets/${id}/pii/${encodeURIComponent(col)}`,
   datasetQualityRules: (id: number | string) => `/api/datasets/${id}/quality-rules`,
   datasetQualityViolations: (id: number | string) => `/api/datasets/${id}/quality-violations`,
-  anonymizePreview: (id: number | string) => `/api/datasets/${id}/anonymize/preview`,
-  anonymize: (id: number | string) => `/api/datasets/${id}/anonymize`,
   datasetAnonymizePreview: (id: number | string) => `/api/datasets/${id}/anonymize/preview`,
   datasetAnonymize: (id: number | string) => `/api/datasets/${id}/anonymize`,
 }

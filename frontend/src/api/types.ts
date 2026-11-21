@@ -194,7 +194,7 @@ export interface AnonymizationPreview {
   dataset_id: number
   dataset_name?: string
   pii_columns_count: number
-  estimated_class: DataClass
+  estimated_class?: DataClass
   hmac_requires_legal_basis?: boolean
   method_counts?: Record<string, number>
   columns: AnonymizationColumn[]
@@ -210,7 +210,7 @@ export interface AnonymizedVersion {
   file_name?: string
   row_count: number
   sha256: string
-  data_class: DataClass
+  data_class?: DataClass
   status?: string
   applied_columns?: string[] | Record<string, string>
   created_at: string

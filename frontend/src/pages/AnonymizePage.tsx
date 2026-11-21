@@ -7,7 +7,6 @@ import type {
   AnonymizationMethodName,
   AnonymizationPreview,
   AnonymizedVersion,
-  DataClass,
   PiiFinding,
   PiiScanResponse,
   PiiType,
@@ -46,10 +45,10 @@ const DEFAULT_METHODS_BY_TYPE: Record<string, AnonymizationMethodName> = {
   email: 'mask',
   phone: 'mask',
   birth_date: 'generalize',
-  ipn: 'hmac',
-  passport: 'hmac',
-  iban: 'hmac',
-  card: 'hmac',
+  ipn: 'mask',
+  passport: 'mask',
+  iban: 'mask',
+  card: 'mask',
 }
 
 function getDefaultMethod(piiType?: string | null): AnonymizationMethodName {
@@ -152,15 +151,6 @@ export default function AnonymizePage() {
 
   const findings: PiiFinding[] = useMemo(() => scan?.findings ?? [], [scan])
 
-  // Розрахунок очікуваного класу на основі відповіді бекенду або вибраних методів
-  const estimatedClass: DataClass = useMemo(() => {
-    if (preview?.estimated_class) return preview.estimated_class
-    if (findings.length === 0) return 'Internal'
-    const selectedMethods = Object.values(methods)
-    if (selectedMethods.includes('hmac')) return 'Personal'
-    return 'Confidential'
-  }, [preview, findings, methods])
-
   const hasHmac = useMemo(() => {
     return Object.values(methods).includes('hmac')
   }, [methods])
@@ -249,9 +239,16 @@ export default function AnonymizePage() {
 
           <div className="pii-title-row">
             <h1>Анонімізація: {scan?.dataset_name ?? `Набір #${datasetId}`}</h1>
-            <span className="badge badge--quality-medium" title="Оцінка на основі обраних методів анонімізації">
-              Очікуваний клас (розрахунок UI): {estimatedClass}
-            </span>
+            {scan?.data_class && (
+              <span className="badge badge--quality-medium" title="Поточний клас набору даних (з бекенду)">
+                Клас набору: {scan.data_class}
+              </span>
+            )}
+            {preview?.estimated_class && (
+              <span className="badge badge--quality-medium" title="Очікуваний клас (відповідь API)">
+                Очікуваний клас: {preview.estimated_class}
+              </span>
+            )}
           </div>
           <p className="subtitle">
             Вибір методів знеособлення для PII-колонок та перевірка результату «до/після» (UC-06).
@@ -343,16 +340,17 @@ export default function AnonymizePage() {
                   <span className="caption cell-muted">Кількість рядків:</span>
                   <div className="cell-strong">{applied.row_count}</div>
                 </div>
-                {scan?.data_class && (
+                {applied.data_class ? (
                   <div>
-                    <span className="caption cell-muted">Поточний клас набору (з API):</span>
+                    <span className="caption cell-muted">Клас даних (з API):</span>
+                    <div><ClassBadge value={applied.data_class} /></div>
+                  </div>
+                ) : scan?.data_class ? (
+                  <div>
+                    <span className="caption cell-muted">Клас набору (з API):</span>
                     <div><ClassBadge value={scan.data_class} /></div>
                   </div>
-                )}
-                <div>
-                  <span className="caption cell-muted">Очікуваний клас (розрахунок UI):</span>
-                  <div><ClassBadge value={applied.data_class} /></div>
-                </div>
+                ) : null}
                 {applied.sha256 ? (
                   <div>
                     <span className="caption cell-muted">Контрольна сума SHA-256:</span>
@@ -539,10 +537,12 @@ export default function AnonymizePage() {
                     Порівняння перших 10 рядків: оригінальні значення ліворуч та знеособлені праворуч із підсвічуванням змінених клітинок.
                   </p>
                 </div>
-                <div style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center' }}>
-                  <span className="caption cell-muted">Очікуваний клас (розрахунок UI):</span>
-                  <ClassBadge value={preview.estimated_class} />
-                </div>
+                {preview.estimated_class && (
+                  <div style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center' }}>
+                    <span className="caption cell-muted">Очікуваний клас:</span>
+                    <ClassBadge value={preview.estimated_class} />
+                  </div>
+                )}
               </div>
 
               {preview.preview_pairs && preview.preview_pairs.length > 0 ? (() => {
