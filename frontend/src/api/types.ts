@@ -175,7 +175,7 @@ export const ANONYMIZATION_METHOD_LABELS: Record<AnonymizationMethodName, string
   mask: 'Маскування (***)',
   generalize: 'Узагальнення',
   hmac: 'HMAC (псевдонімізація)',
-  redact: 'Видалення колонки (не підтримується бекендом)',
+  redact: 'Видалення колонки',
 }
 
 export interface AnonymizationColumn {
@@ -204,12 +204,14 @@ export interface AnonymizationPreview {
 
 export interface AnonymizedVersion {
   dataset_id: number
-  version_id: number
-  version_number: number
+  version_id?: number
+  version_number?: number
   kind: 'clean'
-  file_name: string
+  file_name?: string
   row_count: number
   sha256: string
   data_class: DataClass
+  status?: string
+  applied_columns?: Record<string, string>
   created_at: string
 }

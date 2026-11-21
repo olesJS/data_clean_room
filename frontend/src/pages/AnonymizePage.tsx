@@ -3,11 +3,9 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { applyAnonymization, previewAnonymization } from '../api/anonymization'
 import { ApiError } from '../api/client'
 import { fetchPiiScan } from '../api/datasets'
-import { transformValue } from '../api/mock'
 import type {
   AnonymizationMethodName,
   AnonymizationPreview,
-  AnonymizationPreviewRow,
   AnonymizedVersion,
   DataClass,
   PiiFinding,
@@ -154,13 +152,14 @@ export default function AnonymizePage() {
 
   const findings: PiiFinding[] = useMemo(() => scan?.findings ?? [], [scan])
 
-  // Розрахунок очікуваного класу на основі вибраних методів
+  // Розрахунок очікуваного класу на основі відповіді бекенду або вибраних методів
   const estimatedClass: DataClass = useMemo(() => {
+    if (preview?.estimated_class) return preview.estimated_class
     if (findings.length === 0) return 'Internal'
     const selectedMethods = Object.values(methods)
     if (selectedMethods.includes('hmac')) return 'Personal'
     return 'Confidential'
-  }, [findings, methods])
+  }, [preview, findings, methods])
 
   const hasHmac = useMemo(() => {
     return Object.values(methods).includes('hmac')
@@ -171,8 +170,13 @@ export default function AnonymizePage() {
   }, [findings, methods])
 
   const canApply = useMemo(() => {
-    return Object.keys(methods).length > 0 && busy === null
-  }, [methods, busy])
+    return (
+      findings.length > 0 &&
+      Object.keys(methods).length === findings.length &&
+      unconfiguredCount === 0 &&
+      busy === null
+    )
+  }, [findings.length, methods, unconfiguredCount, busy])
 
   // Зміна методу для конкретної колонки
   const handleMethodChange = (columnName: string, method: AnonymizationMethodName) => {
@@ -193,24 +197,6 @@ export default function AnonymizePage() {
     setNotice(null)
     try {
       const res = await previewAnonymization(datasetId, methods)
-
-      // Якщо бекенд повернув метадані без рядків preview_pairs, генеруємо пари для демонстрації
-      if (!res.preview_pairs || res.preview_pairs.length === 0) {
-        const generatedPairs: AnonymizationPreviewRow[] = []
-        for (let i = 1; i <= 10; i++) {
-          const orig: Record<string, string> = { id: String(i) }
-          const anon: Record<string, string> = { id: String(i) }
-          for (const f of findings) {
-            const rawVal = f.sample_masked ? f.sample_masked.replace(/\*/g, `${i}`) : `значення_${i}`
-            orig[f.column_name] = rawVal
-            const m = methods[f.column_name] ?? 'mask'
-            anon[f.column_name] = transformValue(rawVal, m, f.corrected_pii_type ?? f.pii_type ?? undefined)
-          }
-          generatedPairs.push({ row_index: i, original: orig, anonymized: anon })
-        }
-        res.preview_pairs = generatedPairs
-      }
-
       setPreview(res)
       setNotice('Попередній перегляд успішно побудовано. Перегляньте значення у таблиці нижче.')
     } catch (err) {
@@ -229,7 +215,8 @@ export default function AnonymizePage() {
       const res = await applyAnonymization(datasetId, methods)
       setApplied(res)
       setPreview(null)
-      setNotice(`Очищену версію v${res.version_number} створено (${res.file_name}).`)
+      const versionLabel = res.version_number ? `версії v${res.version_number}` : 'очищених даних'
+      setNotice(`Очищену копію даних успішно створено (${versionLabel}).`)
     } catch (err) {
       setError(formatError(err))
     } finally {
@@ -329,16 +316,26 @@ export default function AnonymizePage() {
                 <div>
                   <h3 style={{ margin: 0, fontSize: '18px' }}>Очищену версію успішно створено!</h3>
                   <p className="cell-muted" style={{ margin: 0, fontSize: '13px' }}>
-                    Створено незмінну копію даних версії v{applied.version_number}.
+                    {applied.version_number
+                      ? `Створено незмінну копію даних версії v${applied.version_number}.`
+                      : 'Створено незмінну очищену копію даних.'}
                   </p>
                 </div>
               </div>
 
               <div className="clean-version-details" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 'var(--space-3)', padding: 'var(--space-3)', background: 'var(--color-light)', borderRadius: 'var(--radius-md)', marginBottom: 'var(--space-4)' }}>
-                <div>
-                  <span className="caption cell-muted">Файл версії:</span>
-                  <div className="cell-strong">{applied.file_name}</div>
-                </div>
+                {applied.file_name && (
+                  <div>
+                    <span className="caption cell-muted">Файл версії:</span>
+                    <div className="cell-strong">{applied.file_name}</div>
+                  </div>
+                )}
+                {applied.version_number !== undefined && (
+                  <div>
+                    <span className="caption cell-muted">Номер версії:</span>
+                    <div className="cell-strong">v{applied.version_number}</div>
+                  </div>
+                )}
                 <div>
                   <span className="caption cell-muted">Кількість рядків:</span>
                   <div className="cell-strong">{applied.row_count}</div>
@@ -347,12 +344,14 @@ export default function AnonymizePage() {
                   <span className="caption cell-muted">Клас даних:</span>
                   <div><ClassBadge value={applied.data_class} /></div>
                 </div>
-                <div>
-                  <span className="caption cell-muted">Контрольна сума SHA-256:</span>
-                  <div className="col-name-mono" title={applied.sha256} style={{ fontSize: '12px' }}>
-                    {applied.sha256.slice(0, 16)}…
+                {applied.sha256 ? (
+                  <div>
+                    <span className="caption cell-muted">Контрольна сума SHA-256:</span>
+                    <div className="col-name-mono" title={applied.sha256} style={{ fontSize: '12px' }}>
+                      {applied.sha256.length > 16 ? `${applied.sha256.slice(0, 16)}…` : applied.sha256}
+                    </div>
                   </div>
-                </div>
+                ) : null}
               </div>
 
               <div className="clean-version-actions" style={{ display: 'flex', gap: 'var(--space-3)' }}>
@@ -612,7 +611,11 @@ export default function AnonymizePage() {
                   </div>
                 )
               })() : (
-                <p className="cell-muted">Дані для попереднього перегляду відсутні.</p>
+                <div style={{ padding: 'var(--space-6)', textAlign: 'center' }}>
+                  <p className="cell-muted" style={{ margin: 0 }}>
+                    Бекенд не повернув рядків для попереднього перегляду.
+                  </p>
+                </div>
               )}
 
               <div className="card__footer" style={{ marginTop: 'var(--space-3)' }}>

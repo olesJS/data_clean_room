@@ -23,12 +23,11 @@ export async function previewAnonymization(
     return mockPreviewAnonymization(datasetId, methods)
   }
 
-  // Надсилаємо обидва поля columns і methods для сумісності з обома контрактами бекенду
+  // Надсилаємо лише columns — стандартний контракт #43
   const raw = await request<Record<string, unknown>>(endpoints.anonymizePreview(datasetId), {
     method: 'POST',
     body: {
       columns: methods,
-      methods,
     },
   })
 
@@ -121,23 +120,23 @@ export async function applyAnonymization(
     method: 'POST',
     body: {
       columns: methods,
-      methods,
     },
   })
 
   const hasHmac = Object.values(methods).some((m) => m.toLowerCase().includes('hmac'))
   const sha = (raw.clean_sha256 as string) || (raw.sha256 as string) || ''
-  const fileStem = `clean_dataset_${datasetId}`
 
   return {
     dataset_id: Number(raw.dataset_id ?? datasetId),
-    version_id: Number(raw.version_id ?? 1),
-    version_number: Number(raw.version_number ?? 1),
+    version_id: raw.version_id !== undefined ? Number(raw.version_id) : undefined,
+    version_number: raw.version_number !== undefined ? Number(raw.version_number) : undefined,
     kind: 'clean',
-    file_name: (raw.file_name as string) || `${fileStem}.csv`,
+    file_name: (raw.file_name as string) || undefined,
     row_count: Number(raw.row_count ?? 0),
     sha256: sha,
     data_class: (raw.data_class as DataClass) || (hasHmac ? 'Personal' : 'Confidential'),
+    status: (raw.status as string) || undefined,
+    applied_columns: raw.applied_columns as Record<string, string> | undefined,
     created_at: (raw.created_at as string) || new Date().toISOString(),
   }
 }
