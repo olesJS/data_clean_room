@@ -1,4 +1,4 @@
-import { STATUS_LABELS, type DataClass, type VersionStatus } from '../api/types'
+import { EXCHANGE_STATUS_LABELS, STATUS_LABELS, type DataClass, type ExchangeRequestStatus, type VersionStatus } from '../api/types'
 import { IconShield } from './icons'
 
 /** Клас даних: пігулка з іконкою щита. Колір темнішає зі зростанням чутливості. */
@@ -28,3 +28,26 @@ export function StatusBadge({ value }: { value: VersionStatus }) {
     </span>
   )
 }
+
+const EXCHANGE_STATUS_MOD: Record<string, string> = {
+  pending: 'attention',
+  Requested: 'attention',
+  approved: 'published',
+  Approved: 'published',
+  rejected: 'expired',
+  Rejected: 'expired',
+  downloaded: 'uploaded',
+  Downloaded: 'uploaded',
+}
+
+/** Статус запиту на обмін даними (UC-08 - UC-10). */
+export function ExchangeStatusBadge({ value }: { value: ExchangeRequestStatus | string }) {
+  const mod = EXCHANGE_STATUS_MOD[value] ?? 'attention'
+  return (
+    <span className={`badge badge--status badge--${mod}`}>
+      <span className="badge__dot" aria-hidden="true" />
+      {EXCHANGE_STATUS_LABELS[value] ?? value}
+    </span>
+  )
+}
+
