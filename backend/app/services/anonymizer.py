@@ -140,8 +140,8 @@ def is_column_generalizable(
     if any(kw in name for kw in allowed_name_keywords):
         return True
 
-    # Word boundary check for "age" / "вік" so page, image, usage are not matched
-    if re.search(r"\b(age|вік)\b", name):
+    # Word boundary check for "age" / "вік" (including customer_age, user_age)
+    if re.search(r"(?:^|_|\b)(age|вік)(?:_|\b|$)", name):
         return True
 
     if series is not None and len(series.dropna()) > 0:
