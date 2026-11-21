@@ -1,5 +1,11 @@
 import { ApiError } from './client'
 import type {
+  AnonymizationColumn,
+  AnonymizationMethodName,
+  AnonymizationPreview,
+  AnonymizationPreviewRow,
+  AnonymizedVersion,
+  DataClass,
   DatasetProfileResponse,
   DatasetVersion,
   LoginResponse,
@@ -552,4 +558,151 @@ export async function mockQualityReport(datasetId?: number | string): Promise<Qu
   if (scenario === 'blocked') return blockedReport
   if (scenario === 'empty') return emptyReport
   return payrollReport
+}
+
+// ─── Sprint 3: Mock анонімізації «до/після» (UC-06, SCRUM-61) ─────────────────
+
+const sampleCustomerRows: Array<Record<string, string>> = [
+  { id: '1', full_name: 'Олександр Коваленко', email: 'o.kovalenko@example.com', phone: '+380501234567', birth_date: '1988-04-12', ipn: '2847101234' },
+  { id: '2', full_name: 'Марія Мельник', email: 'm.melnyk@example.com', phone: '+380672345678', birth_date: '1992-09-23', ipn: '3386902345' },
+  { id: '3', full_name: 'Андрій Шевченко', email: 'a.shevchenko@example.com', phone: '+380933456789', birth_date: '1985-11-05', ipn: '3135503456' },
+  { id: '4', full_name: 'Олена Бойко', email: 'o.boyko@example.com', phone: '+380504567890', birth_date: '1995-02-18', ipn: '3474904567' },
+  { id: '5', full_name: 'Дмитро Кравченко', email: 'd.kravchenko@example.com', phone: '+380685678901', birth_date: '1980-07-30', ipn: '2943205678' },
+  { id: '6', full_name: 'Тетяна Бондаренко', email: 't.bondarenko@example.com', phone: '+380736789012', birth_date: '1991-12-14', ipn: '3358606789' },
+  { id: '7', full_name: 'Сергій Ткаченко', email: 's.tkachenko@example.com', phone: '+380957890123', birth_date: '1987-03-22', ipn: '3185907890' },
+  { id: '8', full_name: 'Юлія Мороз', email: 'y.moroz@example.com', phone: '+380668901234', birth_date: '1994-08-09', ipn: '3455408901' },
+  { id: '9', full_name: 'Володимир Лисенко', email: 'v.lysenko@example.com', phone: '+380979012345', birth_date: '1983-06-17', ipn: '3048409012' },
+  { id: '10', full_name: 'Наталія Руденко', email: 'n.rudenko@example.com', phone: '+380500123456', birth_date: '1990-10-01', ipn: '3314600123' },
+]
+
+const samplePayrollRows: Array<Record<string, string>> = [
+  { id: '1', full_name: 'Іван Петренко', birth_date: '1985-05-14', ipn: '3118101234', salary: '45000' },
+  { id: '2', full_name: 'Ольга Сидоренко', birth_date: '1990-11-20', ipn: '3320202345', salary: '52000' },
+  { id: '3', full_name: 'Василь Козак', birth_date: '1979-03-08', ipn: '2892103456', salary: '61000' },
+  { id: '4', full_name: 'Анна Гончар', birth_date: '1993-07-25', ipn: '3417404567', salary: '48000' },
+  { id: '5', full_name: 'Михайло Павленко', birth_date: '1982-12-11', ipn: '3029605678', salary: '55000' },
+  { id: '6', full_name: 'Катерина Савченко', birth_date: '1996-01-19', ipn: '3508206789', salary: '42000' },
+  { id: '7', full_name: 'Роман Клименко', birth_date: '1988-09-04', ipn: '3238907890', salary: '59000' },
+  { id: '8', full_name: 'Світлана Дорошенко', birth_date: '1991-04-16', ipn: '3334308901', salary: '47000' },
+  { id: '9', full_name: 'Ярослав Кузьменко', birth_date: '1984-10-28', ipn: '3098209012', salary: '64000' },
+  { id: '10', full_name: 'Дарина Марченко', birth_date: '1997-08-03', ipn: '3564500123', salary: '41000' },
+]
+
+function pseudoHmac(val: string): string {
+  let hash = 0
+  for (let i = 0; i < val.length; i++) {
+    hash = (hash << 5) - hash + val.charCodeAt(i)
+    hash |= 0
+  }
+  const hex = Math.abs(hash).toString(16).padStart(8, '0')
+  return `${hex}e49b81f2...`
+}
+
+export function transformValue(value: string | undefined, method: AnonymizationMethodName, piiType?: string): string {
+  if (value === undefined || value === null || value === '') return ''
+  switch (method) {
+    case 'mask':
+      return '***'
+    case 'generalize': {
+      if (piiType === 'birth_date' || /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+        return value.slice(0, 4)
+      }
+      if (/^\d+$/.test(value)) {
+        const num = parseInt(value, 10)
+        const bucket = Math.floor(num / 10) * 10
+        return `${bucket}-${bucket + 9}`
+      }
+      return `${value.slice(0, 1)}***`
+    }
+    case 'hmac':
+      return pseudoHmac(value)
+    case 'redact':
+      return '[ВИДАЛЕНО]'
+    default:
+      return value
+  }
+}
+
+export async function mockPreviewAnonymization(
+  datasetId: number | string,
+  methods: Record<string, AnonymizationMethodName>,
+): Promise<AnonymizationPreview> {
+  await delay(450)
+  const numId = Number(datasetId)
+  const isCustomer = numId === 103 || numId === 2
+  const findingsList = piiFindings[isCustomer ? 103 : 101] ?? []
+  const baseRows = isCustomer ? sampleCustomerRows : samplePayrollRows
+
+  const columns: AnonymizationColumn[] = findingsList.map((f) => ({
+    column_name: f.column_name,
+    pii_type: f.pii_type ?? 'person_name',
+    method: methods[f.column_name] ?? 'mask',
+  }))
+
+  const methodCounts: Record<string, number> = { mask: 0, generalize: 0, hmac: 0, redact: 0 }
+  for (const c of columns) {
+    methodCounts[c.method] = (methodCounts[c.method] ?? 0) + 1
+  }
+
+  let estimatedClass: DataClass = 'Internal'
+  if (columns.length > 0) {
+    const hasHmac = columns.some((c) => c.method === 'hmac')
+    estimatedClass = hasHmac ? 'Personal' : 'Confidential'
+  }
+
+  const piiTypeMap = new Map(findingsList.map((f) => [f.column_name, f.pii_type ?? '']))
+
+  const previewPairs: AnonymizationPreviewRow[] = baseRows.map((row, idx) => {
+    const orig: Record<string, string> = {}
+    const anon: Record<string, string> = {}
+
+    for (const [key, val] of Object.entries(row)) {
+      orig[key] = val
+      const method = methods[key]
+      if (method) {
+        anon[key] = transformValue(val, method, piiTypeMap.get(key))
+      } else {
+        anon[key] = val
+      }
+    }
+
+    return {
+      row_index: idx + 1,
+      original: orig,
+      anonymized: anon,
+    }
+  })
+
+  return {
+    dataset_id: Number(datasetId),
+    dataset_name: isCustomer ? 'customers.json' : 'payroll.csv',
+    pii_columns_count: columns.length,
+    estimated_class: estimatedClass,
+    hmac_requires_legal_basis: columns.some((c) => c.method === 'hmac'),
+    method_counts: methodCounts,
+    columns,
+    preview_pairs: previewPairs,
+  }
+}
+
+export async function mockApplyAnonymization(
+  datasetId: number | string,
+  methods: Record<string, AnonymizationMethodName>,
+): Promise<AnonymizedVersion> {
+  await delay(600)
+  const numId = Number(datasetId)
+  const isCustomer = numId === 103 || numId === 2
+  const hasHmac = Object.values(methods).includes('hmac')
+
+  return {
+    dataset_id: Number(datasetId),
+    version_id: 2,
+    version_number: 2,
+    kind: 'clean',
+    file_name: isCustomer ? 'customers_clean.json' : 'payroll_clean.csv',
+    row_count: isCustomer ? 300 : 500,
+    sha256: '4f83b28b7a32c256a847e096f26487968565c404cf755d57b1ac656f4d0d0246',
+    data_class: hasHmac ? 'Personal' : 'Confidential',
+    created_at: new Date().toISOString(),
+  }
 }
