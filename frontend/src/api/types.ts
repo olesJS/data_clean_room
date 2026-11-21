@@ -212,6 +212,6 @@ export interface AnonymizedVersion {
   sha256: string
   data_class: DataClass
   status?: string
-  applied_columns?: Record<string, string>
+  applied_columns?: string[] | Record<string, string>
   created_at: string
 }

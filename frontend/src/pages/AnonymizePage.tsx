@@ -215,8 +215,13 @@ export default function AnonymizePage() {
       const res = await applyAnonymization(datasetId, methods)
       setApplied(res)
       setPreview(null)
-      const versionLabel = res.version_number ? `версії v${res.version_number}` : 'очищених даних'
-      setNotice(`Очищену копію даних успішно створено (${versionLabel}).`)
+      setNotice('Очищені дані збережено у clean-версії набору.')
+      try {
+        const freshScan = await fetchPiiScan(datasetId)
+        setScan(freshScan)
+      } catch {
+        // Якщо повторний запит scan завершився з помилкою, не ламаємо стан успіху
+      }
     } catch (err) {
       setError(formatError(err))
     } finally {
@@ -244,8 +249,8 @@ export default function AnonymizePage() {
 
           <div className="pii-title-row">
             <h1>Анонімізація: {scan?.dataset_name ?? `Набір #${datasetId}`}</h1>
-            <span className="badge badge--quality-medium">
-              Очікуваний клас: {estimatedClass}
+            <span className="badge badge--quality-medium" title="Оцінка на основі обраних методів анонімізації">
+              Очікуваний клас (розрахунок UI): {estimatedClass}
             </span>
           </div>
           <p className="subtitle">
@@ -314,11 +319,9 @@ export default function AnonymizePage() {
               <div className="clean-version-card__header" style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', marginBottom: 'var(--space-3)' }}>
                 <IconCheckCircle size={28} style={{ color: 'var(--color-success)' }} />
                 <div>
-                  <h3 style={{ margin: 0, fontSize: '18px' }}>Очищену версію успішно створено!</h3>
+                  <h3 style={{ margin: 0, fontSize: '18px' }}>Clean-версію успішно оновлено!</h3>
                   <p className="cell-muted" style={{ margin: 0, fontSize: '13px' }}>
-                    {applied.version_number
-                      ? `Створено незмінну копію даних версії v${applied.version_number}.`
-                      : 'Створено незмінну очищену копію даних.'}
+                    Очищені дані збережено у clean-версії набору.
                   </p>
                 </div>
               </div>
@@ -340,8 +343,14 @@ export default function AnonymizePage() {
                   <span className="caption cell-muted">Кількість рядків:</span>
                   <div className="cell-strong">{applied.row_count}</div>
                 </div>
+                {scan?.data_class && (
+                  <div>
+                    <span className="caption cell-muted">Поточний клас набору (з API):</span>
+                    <div><ClassBadge value={scan.data_class} /></div>
+                  </div>
+                )}
                 <div>
-                  <span className="caption cell-muted">Клас даних:</span>
+                  <span className="caption cell-muted">Очікуваний клас (розрахунок UI):</span>
                   <div><ClassBadge value={applied.data_class} /></div>
                 </div>
                 {applied.sha256 ? (
@@ -358,6 +367,7 @@ export default function AnonymizePage() {
                 <Button
                   variant="primary"
                   onClick={() => navigate(`/datasets/${datasetId}/publish`)}
+                  title="Перейти до перевірки шлюзу та публікації набору (UC-07)"
                 >
                   <span>Перейти до публікації</span>
                   <IconArrowRight size={16} />
@@ -530,7 +540,7 @@ export default function AnonymizePage() {
                   </p>
                 </div>
                 <div style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center' }}>
-                  <span className="caption cell-muted">Очікуваний клас:</span>
+                  <span className="caption cell-muted">Очікуваний клас (розрахунок UI):</span>
                   <ClassBadge value={preview.estimated_class} />
                 </div>
               </div>

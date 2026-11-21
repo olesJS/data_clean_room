@@ -136,7 +136,7 @@ export async function applyAnonymization(
     sha256: sha,
     data_class: (raw.data_class as DataClass) || (hasHmac ? 'Personal' : 'Confidential'),
     status: (raw.status as string) || undefined,
-    applied_columns: raw.applied_columns as Record<string, string> | undefined,
+    applied_columns: raw.applied_columns as string[] | Record<string, string> | undefined,
     created_at: (raw.created_at as string) || new Date().toISOString(),
   }
 }
