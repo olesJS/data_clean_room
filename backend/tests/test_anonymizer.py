@@ -142,6 +142,24 @@ def test_apply_anonymize_creates_clean_version(client, payroll_dataset, db_sessi
     assert meth.column_name == "ipn"
 
 
+def test_generalize_unsupported_column_raises_422(client, payroll_dataset):
+    """Verify that generalize on non-generalizable column (e.g. ipn) returns 422."""
+    ds, _ = payroll_dataset
+    p_login = client.post(
+        "/api/auth/login",
+        json={"email": "provider@example.com", "password": "password123"},
+    )
+    p_headers = {"Authorization": f"Bearer {p_login.json()['access_token']}"}
+
+    res = client.post(
+        f"/api/datasets/{ds.id}/anonymize",
+        json={"columns": {"ipn": "generalize"}},
+        headers=p_headers,
+    )
+    assert res.status_code == 422
+    assert "Generalization is not supported" in res.json()["detail"]
+
+
 def test_anonymize_rbac_denials(client, payroll_dataset):
     ds, _ = payroll_dataset
 

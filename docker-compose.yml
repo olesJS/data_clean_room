@@ -30,6 +30,7 @@ services:
     environment:
       - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres_password}@db:5432/${POSTGRES_DB:-app_db}
       - SECRET_KEY=${SECRET_KEY:-default_secret}
+      - HMAC_KEY=${HMAC_KEY:-dev_anonymization_secret_key_hmac_32_bytes_long!}
     depends_on:
       db:
         condition: service_healthy

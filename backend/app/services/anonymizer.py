@@ -11,7 +11,7 @@ HMAC_KEY = os.getenv("HMAC_KEY")
 ENV = os.getenv("ENV", "development").lower()
 
 if not HMAC_KEY:
-    if ENV in ("development", "test", "dev"):
+    if ENV == "test":
         HMAC_KEY = "dev_anonymization_secret_key_hmac_32_bytes_long!"
     else:
         err = "CRITICAL CONFIG ERROR: HMAC_KEY environment variable must be set!"
@@ -119,12 +119,54 @@ def mask_series(series: pd.Series) -> pd.Series:
     return series.apply(mask_val)
 
 
-def generalize_series(series: pd.Series, kind: str = "auto") -> pd.Series:
-    return series.apply(lambda v: generalize_val(v, kind=kind))
+def is_column_generalizable(
+    col_name: str, series: Optional[pd.Series] = None
+) -> bool:
+    """Check if a column supports generalization (birth/date, age, address/city)."""
+    name = col_name.strip().lower()
+    allowed_name_keywords = (
+        "date",
+        "birth",
+        "dob",
+        "year",
+        "age",
+        "address",
+        "city",
+        "location",
+        "адреса",
+        "місто",
+        "вік",
+        "дата",
+        "народження",
+    )
+    if any(kw in name for kw in allowed_name_keywords):
+        return True
+
+    if series is not None and len(series.dropna()) > 0:
+        sample = series.dropna().astype(str).head(20)
+        # Check if age (all numeric 0-120)
+        if all(s.isdigit() and 0 <= int(s) <= 120 for s in sample):
+            return True
+        # Check if dates
+        date_pattern = re.compile(
+            r"^\d{4}[-/.]\d{2}[-/.]\d{2}$|^\d{2}[-/.]\d{2}[-/.]\d{4}$"
+        )
+        if any(date_pattern.search(s) for s in sample):
+            return True
+        # Check if address with comma
+        if any("," in s for s in sample):
+            return True
+
+    return False
+
 
 
 def hmac_sha256_series(series: pd.Series) -> pd.Series:
     return series.apply(hmac_sha256_val)
+
+
+def generalize_series(series: pd.Series, kind: str = "auto") -> pd.Series:
+    return series.apply(lambda v: generalize_val(v, kind=kind))
 
 
 def apply_anonymization(df: pd.DataFrame, methods: dict) -> pd.DataFrame:
@@ -138,10 +180,14 @@ def apply_anonymization(df: pd.DataFrame, methods: dict) -> pd.DataFrame:
         if col not in df_copy.columns:
             continue
         m = method.lower()
-        if m == "mask":
-            df_copy[col] = mask_series(df_copy[col])
-        elif m in ("generalize", "generalization"):
+        if m in ("generalize", "generalization"):
+            if not is_column_generalizable(col, df_copy[col]):
+                raise ValueError(
+                    f"Generalization is not supported for column '{col}'"
+                )
             df_copy[col] = generalize_series(df_copy[col])
+        elif m == "mask":
+            df_copy[col] = mask_series(df_copy[col])
         elif m in ("hmac", "hmac_sha256"):
             df_copy[col] = hmac_sha256_series(df_copy[col])
         else:

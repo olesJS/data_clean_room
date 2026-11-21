@@ -3,10 +3,14 @@ from pathlib import Path
 
 import pytest
 
+from app.auth import create_access_token, hash_password
+
 from app.models import (
     Dataset,
     DatasetVersion,
     DatasetVersionKind,
+    ExchangeRequest,
+    ExchangeRequestStatus,
     LegalBasis,
     LegalBasisType,
     User,
@@ -92,17 +96,31 @@ def test_full_exchange_workflow(client, exchange_setup, db_session):
     down_res = client.get(f"/api/requests/{request_id}/download", headers=c_headers)
     assert down_res.status_code == 403
 
-    # 4. Steward approves request
+    # 4. Dataset owner (DataProvider) approves request
+    p_login = client.post(
+        "/api/auth/login",
+        json={"email": "provider@example.com", "password": "password123"},
+    )
+    p_headers = {"Authorization": f"Bearer {p_login.json()['access_token']}"}
+
+    # Verify Steward cannot approve -> 403
     s_login = client.post(
         "/api/auth/login",
         json={"email": "steward@example.com", "password": "password123"},
     )
     s_headers = {"Authorization": f"Bearer {s_login.json()['access_token']}"}
+    s_res = client.post(
+        f"/api/requests/{request_id}/approve",
+        json={"comment": "Steward attempt"},
+        headers=s_headers,
+    )
+    assert s_res.status_code == 403
 
+    # Provider approves request
     appr_res = client.post(
         f"/api/requests/{request_id}/approve",
         json={"comment": "Approved under GDPR compliance"},
-        headers=s_headers,
+        headers=p_headers,
     )
     assert appr_res.status_code == 200
     assert appr_res.json()["status"] == "approved"
@@ -111,6 +129,114 @@ def test_full_exchange_workflow(client, exchange_setup, db_session):
     down_ok = client.get(f"/api/requests/{request_id}/download", headers=c_headers)
     assert down_ok.status_code == 200
     assert b"******1234" in down_ok.content
+
+    # Check status changed to downloaded
+    req_check = (
+        db_session.query(ExchangeRequest)
+        .filter(ExchangeRequest.id == request_id)
+        .first()
+    )
+    assert req_check.status == ExchangeRequestStatus.DOWNLOADED
+
+
+def test_exchange_foreign_provider_cannot_review(
+    client, exchange_setup, db_session
+):
+    """Verify that provider who does not own dataset cannot review (returns 404)."""
+    ds = exchange_setup
+    c_login = client.post(
+        "/api/auth/login",
+        json={"email": "consumer@example.com", "password": "password123"},
+    )
+    c_headers = {"Authorization": f"Bearer {c_login.json()['access_token']}"}
+
+    req_res = client.post(
+        "/api/requests",
+        json={
+            "dataset_id": ds.id,
+            "purpose": "Academic research and statistical analytics",
+        },
+        headers=c_headers,
+    )
+    request_id = req_res.json()["id"]
+
+    # Create another provider in db
+    p2 = User(
+        email="other_provider@example.com",
+        hashed_password=hash_password("password123"),
+        role="DataProvider",
+    )
+    db_session.add(p2)
+    db_session.commit()
+    p2_token = create_access_token({"sub": p2.email, "role": p2.role, "id": p2.id})
+    p2_headers = {"Authorization": f"Bearer {p2_token}"}
+
+    # Foreign provider attempt to approve -> 404 (PO Decision 8)
+    appr_res = client.post(
+        f"/api/requests/{request_id}/approve",
+        json={"comment": "Intruder attempt"},
+        headers=p2_headers,
+    )
+    assert appr_res.status_code == 404
+
+    # Foreign provider attempt to reject -> 404
+    rej_res = client.post(
+        f"/api/requests/{request_id}/reject",
+        json={"comment": "Intruder reject"},
+        headers=p2_headers,
+    )
+    assert rej_res.status_code == 404
+
+
+def test_exchange_foreign_consumer_cannot_download(
+    client, exchange_setup, db_session
+):
+    """Verify that a consumer who did not create the request gets 404 on download."""
+    ds = exchange_setup
+    c_login = client.post(
+        "/api/auth/login",
+        json={"email": "consumer@example.com", "password": "password123"},
+    )
+    c_headers = {"Authorization": f"Bearer {c_login.json()['access_token']}"}
+
+    req_res = client.post(
+        "/api/requests",
+        json={
+            "dataset_id": ds.id,
+            "purpose": "Academic research and statistical analytics",
+        },
+        headers=c_headers,
+    )
+    request_id = req_res.json()["id"]
+
+    # Owner approves
+    p_login = client.post(
+        "/api/auth/login",
+        json={"email": "provider@example.com", "password": "password123"},
+    )
+    p_headers = {"Authorization": f"Bearer {p_login.json()['access_token']}"}
+    client.post(
+        f"/api/requests/{request_id}/approve",
+        json={"comment": "Approved"},
+        headers=p_headers,
+    )
+
+    # Another consumer tries to download
+    c2 = User(
+        email="other_consumer@example.com",
+        hashed_password=hash_password("password123"),
+        role="DataConsumer",
+    )
+    db_session.add(c2)
+    db_session.commit()
+    c2_token = create_access_token({"sub": c2.email, "role": c2.role, "id": c2.id})
+    c2_headers = {"Authorization": f"Bearer {c2_token}"}
+
+    down_res = client.get(
+        f"/api/requests/{request_id}/download", headers=c2_headers
+    )
+    assert down_res.status_code == 404
+
 
 
 def test_exchange_purpose_mismatch_fails_approval(
@@ -135,16 +261,16 @@ def test_exchange_purpose_mismatch_fails_approval(
     assert req_res.status_code == 201
     request_id = req_res.json()["id"]
 
-    s_login = client.post(
+    p_login = client.post(
         "/api/auth/login",
-        json={"email": "steward@example.com", "password": "password123"},
+        json={"email": "provider@example.com", "password": "password123"},
     )
-    s_headers = {"Authorization": f"Bearer {s_login.json()['access_token']}"}
+    p_headers = {"Authorization": f"Bearer {p_login.json()['access_token']}"}
 
     appr_res = client.post(
         f"/api/requests/{request_id}/approve",
         json={"comment": "Attempting approval"},
-        headers=s_headers,
+        headers=p_headers,
     )
     assert appr_res.status_code == 409
     detail = appr_res.json()["detail"]
@@ -173,16 +299,16 @@ def test_exchange_revoked_legal_basis_blocks_download(
     assert req_res.status_code == 201
     request_id = req_res.json()["id"]
 
-    s_login = client.post(
+    p_login = client.post(
         "/api/auth/login",
-        json={"email": "steward@example.com", "password": "password123"},
+        json={"email": "provider@example.com", "password": "password123"},
     )
-    s_headers = {"Authorization": f"Bearer {s_login.json()['access_token']}"}
+    p_headers = {"Authorization": f"Bearer {p_login.json()['access_token']}"}
 
     appr_res = client.post(
         f"/api/requests/{request_id}/approve",
         json={"comment": "Approved"},
-        headers=s_headers,
+        headers=p_headers,
     )
     assert appr_res.status_code == 200
 

@@ -19,7 +19,7 @@ from app.models import (
     DatasetVersionKind,
     User,
 )
-from app.services.anonymizer import apply_anonymization
+from app.services.anonymizer import apply_anonymization, is_column_generalizable
 
 logger = logging.getLogger(__name__)
 
@@ -119,10 +119,16 @@ def preview_anonymization(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail=f"Column '{col}' not found in dataset",
             )
-        if method.lower() not in ("mask", "generalize", "hmac", "hmac_sha256"):
+        m_lower = method.lower()
+        if m_lower not in ("mask", "generalize", "hmac", "hmac_sha256"):
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail=f"Unknown anonymization method '{method}'",
+            )
+        if m_lower == "generalize" and not is_column_generalizable(col, df[col]):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"Generalization is not supported for column '{col}'",
             )
 
     # Preview first 10 rows
@@ -161,10 +167,16 @@ def apply_dataset_anonymization(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail=f"Column '{col}' not found in dataset",
             )
-        if method.lower() not in ("mask", "generalize", "hmac", "hmac_sha256"):
+        m_lower = method.lower()
+        if m_lower not in ("mask", "generalize", "hmac", "hmac_sha256"):
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail=f"Unknown anonymization method '{method}'",
+            )
+        if m_lower == "generalize" and not is_column_generalizable(col, df[col]):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"Generalization is not supported for column '{col}'",
             )
 
     # Apply anonymization to full dataframe

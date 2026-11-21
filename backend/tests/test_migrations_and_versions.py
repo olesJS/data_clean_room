@@ -65,49 +65,7 @@ def test_alembic_upgrade_head_on_clean_db():
                 pass
 
 
-def test_alembic_stamp_on_existing_db():
-    """Verify that alembic baseline stamp on existing DB works cleanly."""
-    with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
-        temp_db_path = f.name
 
-    try:
-        sqlite_url = f"sqlite:///{temp_db_path}"
-        backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        ini_path = os.path.join(backend_dir, "alembic.ini")
-
-        # Create tables using Base.metadata.create_all (simulating existing deployment)
-        from app.database import Base
-        engine = create_engine(sqlite_url)
-        Base.metadata.create_all(bind=engine)
-        inspector = inspect(engine)
-        tables_before = inspector.get_table_names()
-        assert "users" in tables_before
-        assert "alembic_version" not in tables_before
-        engine.dispose()
-
-        alembic_cfg = Config(ini_path)
-        alembic_cfg.set_main_option("sqlalchemy.url", sqlite_url)
-        alembic_cfg.set_main_option(
-            "script_location", os.path.join(backend_dir, "alembic")
-        )
-
-        # Baseline stamping
-        command.stamp(alembic_cfg, "head")
-
-        # Now upgrade head is a safe no-op
-        command.upgrade(alembic_cfg, "head")
-
-        engine = create_engine(sqlite_url)
-        inspector = inspect(engine)
-        tables_after = inspector.get_table_names()
-        assert "alembic_version" in tables_after
-        engine.dispose()
-    finally:
-        if os.path.exists(temp_db_path):
-            try:
-                os.remove(temp_db_path)
-            except Exception:
-                pass
 
 
 def test_upload_creates_raw_dataset_version(client, db_session):

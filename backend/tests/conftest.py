@@ -1,4 +1,9 @@
+import os
 import shutil
+
+# Set testing environment variables before importing app
+os.environ.setdefault("ENV", "test")
+os.environ.setdefault("DATABASE_URL", "sqlite:///:memory:")
 
 import pytest
 from fastapi.testclient import TestClient

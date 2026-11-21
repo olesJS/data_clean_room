@@ -48,6 +48,17 @@ cd data_clean_room
 docker compose up --build -d
 ```
 
+> [!NOTE]
+> При першому розгортанні або після оновлення схеми міграціями (якщо база вже була ініціалізована локально) виконайте:
+> ```bash
+> docker compose down -v
+> docker compose up --build -d
+> ```
+> Для генерації криптографічно стійкого ключа `HMAC_KEY`:
+> ```bash
+> python -c "import secrets; print(secrets.token_hex(32))"
+> ```
+
 Конфігурація розробки за замовчуванням визначена у `docker-compose.yml`. Щоб перевизначити її локально, створіть `.env`:
 
 ```bash

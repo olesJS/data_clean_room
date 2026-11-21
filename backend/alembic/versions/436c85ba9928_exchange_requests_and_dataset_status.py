@@ -29,7 +29,11 @@ def upgrade() -> None:
     sa.Column(
         'status',
         sa.Enum(
-            'PENDING', 'APPROVED', 'REJECTED', name='exchange_request_status_enum'
+            'PENDING',
+            'APPROVED',
+            'REJECTED',
+            'DOWNLOADED',
+            name='exchange_request_status_enum',
         ),
         nullable=False,
     ),

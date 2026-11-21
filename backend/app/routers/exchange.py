@@ -209,17 +209,24 @@ def approve_exchange_request(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> Dict[str, Any]:
-    """DataSteward approves request after checking legal basis."""
-    if current_user.role != "DataSteward":
+    """Dataset owner (DataProvider) approves request after checking legal basis."""
+    if current_user.role != "DataProvider":
+        log_event(
+            actor=current_user.email,
+            action="ACCESS_DENIED",
+            object=f"request:{request_id}",
+            result="FORBIDDEN",
+            db=db,
+        )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Access forbidden: only DataSteward can approve exchange requests",
+            detail="Only the dataset owner can review requests",
         )
 
     req = (
         db.query(ExchangeRequest).filter(ExchangeRequest.id == request_id).first()
     )
-    if not req:
+    if not req or not req.dataset or req.dataset.uploaded_by != current_user.email:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Request {request_id} not found",
@@ -275,17 +282,24 @@ def reject_exchange_request(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> Dict[str, Any]:
-    """DataSteward rejects request."""
-    if current_user.role != "DataSteward":
+    """Dataset owner (DataProvider) rejects request."""
+    if current_user.role != "DataProvider":
+        log_event(
+            actor=current_user.email,
+            action="ACCESS_DENIED",
+            object=f"request:{request_id}",
+            result="FORBIDDEN",
+            db=db,
+        )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Access forbidden: only DataSteward can reject exchange requests",
+            detail="Only the dataset owner can review requests",
         )
 
     req = (
         db.query(ExchangeRequest).filter(ExchangeRequest.id == request_id).first()
     )
-    if not req:
+    if not req or not req.dataset or req.dataset.uploaded_by != current_user.email:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Request {request_id} not found",
@@ -330,27 +344,28 @@ def download_clean_dataset(
     req = (
         db.query(ExchangeRequest).filter(ExchangeRequest.id == request_id).first()
     )
-    if not req:
+    # PO Decision 8: If request not found OR belongs to another consumer -> 404
+    if not req or req.consumer_id != current_user.id:
+        log_event(
+            actor=current_user.email,
+            action="ACCESS_DENIED",
+            object=path,
+            result="FAILURE",
+            db=db,
+        )
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Request {request_id} not found",
         )
 
-    # Only request creator (consumer) can download
-    if req.consumer_id != current_user.id:
+    if req.status != ExchangeRequestStatus.APPROVED:
         log_event(
             actor=current_user.email,
-            action="ACCESS_DENIED",
-            object=path,
+            action="DENY",
+            object=f"request:{req.id}",
             result="FORBIDDEN",
             db=db,
         )
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Access forbidden: you can only download your own approved requests",
-        )
-
-    if req.status != ExchangeRequestStatus.APPROVED:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=f"Cannot download: request is in status {req.status.value}",
@@ -359,6 +374,13 @@ def download_clean_dataset(
     # Re-check legal basis before download
     lb_check = check_legal_basis(req.dataset, req.purpose, db)
     if not lb_check.ok:
+        log_event(
+            actor=current_user.email,
+            action="DENY",
+            object=f"request:{req.id}:{lb_check.reason}",
+            result="FAILURE",
+            db=db,
+        )
         err_msg = f"Legal basis is no longer valid ({lb_check.reason})"
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -380,6 +402,10 @@ def download_clean_dataset(
             detail="Clean version of dataset is not available yet",
         )
 
+    # Update status to DOWNLOADED per UC-10
+    req.status = ExchangeRequestStatus.DOWNLOADED
+    db.commit()
+
     log_event(
         actor=current_user.email,
         action="DOWNLOAD",
@@ -388,9 +414,12 @@ def download_clean_dataset(
         db=db,
     )
 
-    clean_filename = f"{req.dataset.name}_clean.csv"
+    base = os.path.splitext(req.dataset.name)[0]
+    ext = req.dataset.file_type.lower() if req.dataset.file_type else "csv"
+    media = "application/json" if ext == "json" else "text/csv"
+    filename = f"{base}_clean.{ext}"
     return FileResponse(
         clean_version.file_path,
-        filename=clean_filename,
-        media_type="text/csv",
+        filename=filename,
+        media_type=media,
     )
