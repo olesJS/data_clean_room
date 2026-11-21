@@ -129,17 +129,19 @@ def is_column_generalizable(
         "birth",
         "dob",
         "year",
-        "age",
         "address",
         "city",
         "location",
         "адреса",
         "місто",
-        "вік",
         "дата",
         "народження",
     )
     if any(kw in name for kw in allowed_name_keywords):
+        return True
+
+    # Word boundary check for "age" / "вік" so page, image, usage are not matched
+    if re.search(r"\b(age|вік)\b", name):
         return True
 
     if series is not None and len(series.dropna()) > 0:

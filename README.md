@@ -42,9 +42,14 @@ Data Clean Room об'єднує backend на FastAPI, frontend на React і Pos
 
 ### Запуск повного стеку
 
+1. Створіть `.env` файл на основі `.env.example` та згенеруйте криптографічно стійкий `HMAC_KEY`:
 ```bash
-git clone https://github.com/olesJS/data_clean_room.git
-cd data_clean_room
+cp .env.example .env
+python -c "import secrets; print('HMAC_KEY=' + secrets.token_hex(32))" >> .env
+```
+
+2. Запустіть сервіси через Docker Compose:
+```bash
 docker compose up --build -d
 ```
 
@@ -54,16 +59,6 @@ docker compose up --build -d
 > docker compose down -v
 > docker compose up --build -d
 > ```
-> Для генерації криптографічно стійкого ключа `HMAC_KEY`:
-> ```bash
-> python -c "import secrets; print(secrets.token_hex(32))"
-> ```
-
-Конфігурація розробки за замовчуванням визначена у `docker-compose.yml`. Щоб перевизначити її локально, створіть `.env`:
-
-```bash
-cp .env.example .env
-```
 
 ### Зупинка стеку
 
