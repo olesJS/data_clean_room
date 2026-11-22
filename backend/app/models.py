@@ -62,6 +62,10 @@ class Dataset(Base):
     profile_json = Column(JSON, nullable=True)
     pii_json = Column(JSON, nullable=True)
     status = Column(String(50), default="uploaded", nullable=False)
+    # Sprint 3 publication fields (SCRUM-57)
+    retention_until = Column(Date, nullable=True)
+    published_at = Column(DateTime, nullable=True)
+    published_by = Column(String(255), nullable=True)
 
 
 class LegalBasisType(str, enum.Enum):
