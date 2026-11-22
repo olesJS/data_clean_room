@@ -20,6 +20,9 @@ import type {
   QualityReport,
   QualityRule,
   QualityViolation,
+  PublicationCheck,
+  PublicationReason,
+  PublishResult,
   Role,
   UploadResult,
   User,
@@ -1049,3 +1052,73 @@ export async function mockRevokeLegalBasis(
   }
   throw new ApiError('Правову підставу не знайдено', 404)
 }
+
+// ─── Sprint 3: Mock публікації та воріт безпеки (UC-07, SCRUM-62) ──────────────
+
+export async function mockCheckPublication(
+  datasetId: number | string,
+  retentionUntil?: string,
+): Promise<PublicationCheck> {
+  await delay(350)
+  const numId = Number(datasetId)
+  const reasons: PublicationReason[] = []
+
+  // Перевірка терміну зберігання
+  const todayStr = new Date().toISOString().slice(0, 10)
+  if (!retentionUntil || retentionUntil < todayStr) {
+    reasons.push({
+      code: 'retention_required',
+      short_code: 'retention_req',
+      message: 'Термін зберігання обов’язковий і має бути не раніше поточної дати.',
+    })
+  }
+
+  // Перевірка активних підстав для HMAC
+  const bases = mockLegalBasesStore[numId] ?? []
+  const hasActiveBasis = bases.some((b) => b.is_active && !b.revoked_at)
+  const isHmacDataset = numId === 101 || numId === 103 || numId === 1
+
+  if (isHmacDataset && !hasActiveBasis) {
+    reasons.push({
+      code: 'hmac_without_legal_basis',
+      short_code: 'hmac_no_basis',
+      message: 'Для колонок із HMAC (псевдонімізація) потрібна чинна правова підстава.',
+      columns: ['ipn'],
+      legal_basis_reason: 'Жодної активної згоди або договору для мети обробки не знайдено',
+    })
+  }
+
+  return {
+    allowed: reasons.length === 0,
+    reasons,
+    new_class: isHmacDataset ? 'Personal' : 'Confidential',
+    hmac_columns: isHmacDataset ? ['ipn'] : [],
+    missing_columns: [],
+    clean_version_id: 2,
+  }
+}
+
+export async function mockPublishDataset(
+  datasetId: number | string,
+  retentionUntil: string,
+): Promise<PublishResult> {
+  await delay(600)
+  const gate = await mockCheckPublication(datasetId, retentionUntil)
+  if (!gate.allowed) {
+    throw new ApiError('Publication gate failed: умови публікації не виконано', 422)
+  }
+
+  const numId = Number(datasetId)
+  const isHmacDataset = numId === 101 || numId === 103 || numId === 1
+
+  return {
+    dataset_id: numId,
+    status: 'published',
+    data_class: isHmacDataset ? 'Personal' : 'Confidential',
+    published_at: new Date().toISOString(),
+    published_by: storage.getEmail() ?? 'provider@example.com',
+    retention_until: retentionUntil,
+    gate,
+  }
+}
+

@@ -27,4 +27,6 @@ export const endpoints = {
   requestDownload: (id: number | string) => `/api/requests/${id}/download`,
   legalBasis: (id: number | string) => `/api/datasets/${id}/legal-basis`,
   legalBasisRevoke: (id: string) => `/api/legal-basis/${id}/revoke`,
+  publishCheck: (id: number | string) => `/api/datasets/${id}/publish/check`,
+  publish: (id: number | string) => `/api/datasets/${id}/publish`,
 }
