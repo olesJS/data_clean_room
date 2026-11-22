@@ -320,3 +320,33 @@ export interface CreateExchangeRequestPayload {
 export interface ReviewExchangeRequestPayload {
   comment?: string | null
 }
+
+// ─── Sprint 3: Публікація та ворота безпеки (UC-07, SCRUM-62) ──────────────────
+
+export interface PublicationReason {
+  code: string
+  short_code: string
+  message: string
+  columns?: string[]
+  legal_basis_reason?: string
+}
+
+export interface PublicationCheck {
+  allowed: boolean
+  reasons: PublicationReason[]
+  new_class: DataClass
+  hmac_columns: string[]
+  missing_columns: string[]
+  clean_version_id: number | null
+}
+
+export interface PublishResult {
+  dataset_id: number
+  status: string
+  data_class: DataClass
+  published_at: string
+  published_by: string
+  retention_until: string
+  gate: PublicationCheck
+}
+
