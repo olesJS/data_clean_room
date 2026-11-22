@@ -44,6 +44,7 @@ function format409Reason(message: string): string {
 export default function AccessRequestsPage() {
   const { role } = useAuth()
   const isSteward = role === 'DataSteward'
+  const isProvider = role === 'DataProvider'
 
   const [requests, setRequests] = useState<ExchangeRequest[]>([])
   const [loading, setLoading] = useState(true)
@@ -223,10 +224,12 @@ export default function AccessRequestsPage() {
       <div className="page-header page-header--row">
         <div>
           <h1 className="page-title">
-            {isSteward ? 'Схвалення запитів на доступ' : 'Запити на доступ до наборів'}
+            {isSteward ? 'Моніторинг запитів на доступ' : 'Запити на доступ до наборів'}
           </h1>
           <p className="page-subtitle">
-            Черга запитів споживачів: перевірка правової підстави (UC-09, UC-10) та керування згодами (UC-12)
+            {isSteward
+              ? 'Черга запитів споживачів (режим перегляду для Data Steward) та керування згодами (UC-12)'
+              : 'Черга запитів споживачів: перевірка правової підстави (UC-09, UC-10) та керування згодами (UC-12)'}
           </p>
         </div>
         <Button variant="secondary" onClick={loadRequests} disabled={loading} title="Оновити список">
@@ -291,6 +294,15 @@ export default function AccessRequestsPage() {
             </div>
           </div>
 
+          {isSteward && (
+            <div className="alert-banner alert-banner--warning" style={{ marginTop: 'var(--space-3)' }}>
+              <IconShield size={18} />
+              <div>
+                <strong>Режим перегляду Data Steward:</strong> Згідно з правилами безпеки, схвалювати або відхиляти запити на доступ може лише власник набору даних (Data Provider). Data Steward має право переглядати всі запити та відкликати згоди субʼєктів даних (UC-12).
+              </div>
+            </div>
+          )}
+
           {error && (
             <div style={{ marginTop: 'var(--space-4)' }}>
               <ErrorMessage title="Помилка завантаження черги запитів">{error}</ErrorMessage>
@@ -324,7 +336,7 @@ export default function AccessRequestsPage() {
                       <th>Дата запиту</th>
                       <th>Статус</th>
                       <th>Коментар</th>
-                      <th style={{ textAlign: 'right' }}>Рішення</th>
+                      <th style={{ textAlign: 'right' }}>{isProvider ? 'Рішення' : 'Стан'}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -362,22 +374,28 @@ export default function AccessRequestsPage() {
                           </td>
                           <td style={{ textAlign: 'right' }}>
                             {isPending ? (
-                              <div style={{ display: 'flex', gap: 'var(--space-1)', justifyContent: 'flex-end' }}>
-                                <Button
-                                  variant="primary"
-                                  onClick={() => openApproveModal(req)}
-                                  style={{ padding: '6px 12px', fontSize: '13px' }}
-                                >
-                                  Схвалити
-                                </Button>
-                                <Button
-                                  variant="secondary"
-                                  onClick={() => openRejectModal(req)}
-                                  style={{ padding: '6px 12px', fontSize: '13px', color: 'var(--color-danger)' }}
-                                >
-                                  Відхилити
-                                </Button>
-                              </div>
+                              isProvider ? (
+                                <div style={{ display: 'flex', gap: 'var(--space-1)', justifyContent: 'flex-end' }}>
+                                  <Button
+                                    variant="primary"
+                                    onClick={() => openApproveModal(req)}
+                                    style={{ padding: '6px 12px', fontSize: '13px' }}
+                                  >
+                                    Схвалити
+                                  </Button>
+                                  <Button
+                                    variant="secondary"
+                                    onClick={() => openRejectModal(req)}
+                                    style={{ padding: '6px 12px', fontSize: '13px', color: 'var(--color-danger)' }}
+                                  >
+                                    Відхилити
+                                  </Button>
+                                </div>
+                              ) : (
+                                <span className="caption text-muted" title="Схвалювати або відхиляти запит може лише власник набору (DataProvider)">
+                                  Очікує рішення власника
+                                </span>
+                              )
                             ) : (
                               <span className="caption text-muted">Опрацьовано</span>
                             )}
