@@ -7,10 +7,12 @@ codes so the UI and tests do not depend on human-readable wording.
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass, field
 from datetime import date
 from typing import Any, Optional
 
+import pandas as pd
 from sqlalchemy.orm import Session
 
 from app.models import (
@@ -22,11 +24,14 @@ from app.models import (
 )
 from app.services.legal_basis_service import check_legal_basis
 from app.services.pii_utils import active_pii_findings
+from app.services.quality_engine import validate_dataframe
+from app.services.quality_rules_resolver import get_rules_path_for_dataset
 
 NO_CLEAN_VERSION = "no_clean_version"
 PII_NOT_PROCESSED = "pii_not_processed"
 HMAC_WITHOUT_LEGAL_BASIS = "hmac_without_legal_basis"
 RETENTION_REQUIRED = "retention_required"
+QUALITY_BLOCKED = "quality_blocked"
 
 _HMAC_METHODS = {"hmac", "hmac_sha256"}
 
@@ -35,6 +40,7 @@ _REASON_META = {
     PII_NOT_PROCESSED: "pii_not_processed",
     HMAC_WITHOUT_LEGAL_BASIS: "hmac_no_basis",
     RETENTION_REQUIRED: "retention_req",
+    QUALITY_BLOCKED: "quality_block",
 }
 
 
@@ -110,6 +116,26 @@ def _resolve_retention(
     return retention_until if retention_until is not None else dataset.retention_until
 
 
+def quality_blocks_publication(dataset: Dataset) -> bool:
+    """Return whether resolved quality rules contain a blocking violation."""
+    if not dataset.file_path or not os.path.exists(dataset.file_path):
+        return False
+
+    if dataset.file_type == "csv":
+        frame = pd.read_csv(
+            dataset.file_path,
+            dtype={"ipn": str, "tax_id": str, "edrpou": str},
+        )
+    elif dataset.file_type == "json":
+        frame = pd.read_json(dataset.file_path)
+    else:
+        frame = pd.read_csv(dataset.file_path)
+
+    rules_path = get_rules_path_for_dataset(dataset)
+    report = validate_dataframe(frame, rules_path or [])
+    return bool(report.get("can_publish") is False)
+
+
 def evaluate(
     db: Session,
     dataset: Dataset,
@@ -169,6 +195,15 @@ def evaluate(
             )
         )
 
+    if quality_blocks_publication(dataset):
+        reasons.append(
+            _reason(
+                QUALITY_BLOCKED,
+                "Dataset quality rules contain blocking violations.",
+                has_blocking_violations=True,
+            )
+        )
+
     if not pii_findings:
         new_class = "Internal"
     elif hmac_columns:
@@ -211,8 +246,10 @@ __all__ = [
     "NO_CLEAN_VERSION",
     "PII_NOT_PROCESSED",
     "RETENTION_REQUIRED",
+    "QUALITY_BLOCKED",
     "apply_publication",
     "evaluate",
     "latest_clean_version",
     "method_map",
+    "quality_blocks_publication",
 ]

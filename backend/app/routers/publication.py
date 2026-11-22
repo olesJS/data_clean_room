@@ -287,14 +287,6 @@ def check_publication(
     )
     result = evaluate(db, dataset, retention_until=retention_until)
 
-    log_event(
-        actor=current_user.email,
-        action="PUBLISH_CHECK",
-        object=f"dataset:{dataset.id}:allowed:{result.allowed}",
-        result="SUCCESS",
-        db=db,
-    )
-
     return result.as_dict()
 
 

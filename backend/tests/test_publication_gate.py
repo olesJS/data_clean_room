@@ -22,6 +22,7 @@ from app.models import (
     User,
     utc_now,
 )
+from app.services import publication_gate as publication_gate_service
 from app.services.publication_gate import evaluate
 
 DATA_DIR = Path(__file__).resolve().parents[2] / "data"
@@ -222,6 +223,27 @@ def test_gate_rejects_past_retention_date(db_session, tmp_path):
 
     assert result.allowed is False
     assert result.reason_codes() == ["retention_required"]
+
+
+def test_gate_rejects_quality_blocking_rules(
+    db_session,
+    tmp_path,
+    monkeypatch,
+):
+    dataset = _create_dataset(db_session, tmp_path)
+    _add_clean_version(db_session, dataset, tmp_path)
+    _add_methods(db_session, dataset, MASK_METHODS)
+    monkeypatch.setattr(
+        publication_gate_service,
+        "quality_blocks_publication",
+        lambda _dataset: True,
+    )
+
+    result = evaluate(db_session, dataset, retention_until=FUTURE_DATE)
+
+    assert result.allowed is False
+    assert result.reason_codes() == ["quality_blocked"]
+    assert result.reasons[0]["has_blocking_violations"] is True
 
 
 def test_gate_allows_masked_dataset_as_confidential(db_session, tmp_path):
@@ -432,14 +454,15 @@ def test_check_endpoint_returns_gate_and_does_not_mutate(
         .count()
         == methods_before
     )
-    audit = _audit_rows(
-        db_session,
-        "PUBLISH_CHECK",
-        result="SUCCESS",
-        contains=f"dataset:{dataset.id}",
+    assert (
+        db_session.query(AuditLog)
+        .filter(
+            AuditLog.action == "PUBLISH_CHECK",
+            AuditLog.object.contains(f"dataset:{dataset.id}"),
+        )
+        .count()
+        == 0
     )
-    assert len(audit) == 1
-    assert audit[0].object.endswith("allowed:False")
 
 
 def test_check_reports_ready_dataset(client, provider_token, db_session, tmp_path):
@@ -456,14 +479,6 @@ def test_check_reports_ready_dataset(client, provider_token, db_session, tmp_pat
     assert body["reasons"] == []
     assert body["new_class"] == "Confidential"
     assert body["clean_version_id"] == version.id
-    audit = _audit_rows(
-        db_session,
-        "PUBLISH_CHECK",
-        result="SUCCESS",
-        contains=f"dataset:{dataset.id}",
-    )
-    assert len(audit) == 1
-    assert audit[0].object.endswith("allowed:True")
 
 
 def test_publish_denies_past_retention_and_audits_deny(
@@ -490,6 +505,37 @@ def test_publish_denies_past_retention_and_audits_deny(
         "DENY",
         result="DENY",
         contains=f"dataset:{dataset.id}:publish:reasons:retention_required",
+    )
+    assert len(audit) == 1
+
+
+def test_publish_denies_quality_block_and_audits_deny(
+    client,
+    provider_token,
+    db_session,
+    tmp_path,
+    monkeypatch,
+):
+    dataset = _create_dataset(db_session, tmp_path)
+    _add_clean_version(db_session, dataset, tmp_path)
+    _add_methods(db_session, dataset, MASK_METHODS)
+    monkeypatch.setattr(
+        publication_gate_service,
+        "quality_blocks_publication",
+        lambda _dataset: True,
+    )
+    headers = {"Authorization": f"Bearer {provider_token}"}
+
+    response = _publish(client, headers, dataset.id)
+
+    assert response.status_code == 422, response.text
+    assert _codes(response) == ["quality_blocked"]
+
+    audit = _audit_rows(
+        db_session,
+        "DENY",
+        result="DENY",
+        contains=f"dataset:{dataset.id}:publish:reasons:quality_blocked",
     )
     assert len(audit) == 1
 
