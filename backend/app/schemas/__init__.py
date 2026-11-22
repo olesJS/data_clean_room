@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, ConfigDict
@@ -10,6 +10,7 @@ from app.schemas.legal_basis import (
     LegalBasisRevoke,
     LegalBasisType,
 )
+from app.schemas.publication import PublishRequest
 
 
 class LoginRequest(BaseModel):
@@ -54,6 +55,10 @@ class DatasetResponse(BaseModel):
     created_at: datetime
     data_class: Optional[str] = None
     quality_score: Optional[float] = None
+    status: str = "uploaded"
+    retention_until: Optional[date] = None
+    published_at: Optional[datetime] = None
+    published_by: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -150,4 +155,5 @@ __all__ = [
     "PiiUpdatePayload",
     "PiiScanResponse",
     "DatasetPIIResponse",
+    "PublishRequest",
 ]

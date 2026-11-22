@@ -56,6 +56,14 @@ def test_alembic_upgrade_head_on_clean_db():
         columns = {c["name"] for c in inspector.get_columns("dataset_versions")}
         required_cols = {"id", "dataset_id", "kind", "file_path", "sha256", "row_count"}
         assert required_cols.issubset(columns)
+
+        dataset_columns = {c["name"] for c in inspector.get_columns("datasets")}
+        required_publication_cols = {
+            "retention_until",
+            "published_at",
+            "published_by",
+        }
+        assert required_publication_cols.issubset(dataset_columns)
         engine.dispose()
     finally:
         if os.path.exists(temp_db_path):

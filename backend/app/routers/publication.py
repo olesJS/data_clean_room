@@ -1,10 +1,12 @@
 import hashlib
 import logging
 import os
-from typing import Any, Dict
+from datetime import date
+from typing import Any, Dict, Optional
 
 import pandas as pd
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -19,7 +21,9 @@ from app.models import (
     DatasetVersionKind,
     User,
 )
+from app.schemas.publication import PublishRequest
 from app.services.anonymizer import apply_anonymization, is_column_generalizable
+from app.services.publication_gate import apply_publication, evaluate
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +39,8 @@ def _get_dataset_for_owner(
     current_user: User,
     request: Request,
     db: Session,
+    *,
+    forbidden_detail: Optional[str] = None,
 ) -> Dataset:
     """Access restricted strictly to dataset owner (DataProvider).
 
@@ -55,7 +61,8 @@ def _get_dataset_for_owner(
         )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Access forbidden: only DataProvider can anonymize datasets",
+            detail=forbidden_detail
+            or "Access forbidden: only DataProvider can anonymize datasets",
         )
 
     dataset = db.query(Dataset).filter(Dataset.id == dataset_id).first()
@@ -258,3 +265,112 @@ def apply_dataset_anonymization(
         "status": "anonymized",
         "applied_columns": list(payload.columns.keys()),
     }
+
+
+@router.get("/api/datasets/{dataset_id}/publish/check")
+def check_publication(
+    dataset_id: int,
+    request: Request,
+    retention_until: Optional[date] = None,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> Dict[str, Any]:
+    """Evaluate the publication gate without changing any state."""
+    dataset = _get_dataset_for_owner(
+        dataset_id,
+        current_user,
+        request,
+        db,
+        forbidden_detail=(
+            "Access forbidden: only DataProvider can publish datasets"
+        ),
+    )
+    result = evaluate(db, dataset, retention_until=retention_until)
+
+    log_event(
+        actor=current_user.email,
+        action="PUBLISH_CHECK",
+        object=f"dataset:{dataset.id}:allowed:{result.allowed}",
+        result="SUCCESS",
+        db=db,
+    )
+
+    return result.as_dict()
+
+
+@router.post("/api/datasets/{dataset_id}/publish")
+def publish_dataset(
+    dataset_id: int,
+    payload: PublishRequest,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Publish a dataset when every gate condition is satisfied."""
+    dataset = _get_dataset_for_owner(
+        dataset_id,
+        current_user,
+        request,
+        db,
+        forbidden_detail=(
+            "Access forbidden: only DataProvider can publish datasets"
+        ),
+    )
+
+    if dataset.status == "published":
+        log_event(
+            actor=current_user.email,
+            action="PUBLISH",
+            object=f"dataset:{dataset.id}",
+            result="CONFLICT",
+            db=db,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Dataset is already published",
+        )
+
+    result = evaluate(db, dataset, retention_until=payload.retention_until)
+    if not result.allowed:
+        log_event(
+            actor=current_user.email,
+            action="DENY",
+            object=(
+                f"dataset:{dataset.id}:publish:reasons:"
+                + ",".join(result.reason_codes())
+            ),
+            result="DENY",
+            db=db,
+        )
+        return JSONResponse(status_code=422, content=result.as_dict())
+
+    apply_publication(
+        db,
+        dataset,
+        retention_until=payload.retention_until,
+        new_class=result.new_class,
+        actor=current_user.email,
+    )
+
+    response = {
+        "dataset_id": dataset.id,
+        "status": dataset.status,
+        "data_class": dataset.data_class,
+        "published_at": dataset.published_at,
+        "published_by": dataset.published_by,
+        "retention_until": dataset.retention_until,
+        "gate": result.as_dict(),
+    }
+
+    log_event(
+        actor=current_user.email,
+        action="PUBLISH",
+        object=(
+            f"dataset:{dataset.id}:class:{result.new_class}:"
+            f"retention:{payload.retention_until.isoformat()}"
+        ),
+        result="SUCCESS",
+        db=db,
+    )
+
+    return response
