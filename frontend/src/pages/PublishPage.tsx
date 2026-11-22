@@ -424,7 +424,7 @@ export default function PublishPage() {
                   <div style={{ fontSize: '13px', color: isOk ? 'var(--success-text)' : 'var(--danger-text)' }}>
                     {isOk
                       ? `Очищену копію створено успішно${cleanVersionId ? ` (ID: #${cleanVersionId})` : ''}.`
-                      : (cleanErr?.message || 'Очищена версія відсутня. Спочатку виконайте знеособлення на сторінці анонімізації.')}
+                      : 'Очищена версія відсутня. Спочатку виконайте знеособлення на сторінці анонімізації.'}
                   </div>
                 </div>
               </div>
@@ -435,6 +435,7 @@ export default function PublishPage() {
           {(() => {
             const piiErr = gate?.reasons.find((r) => r.code === 'pii_not_processed')
             const isOk = !piiErr
+            const missing = piiErr?.columns ?? gate?.missing_columns ?? []
             return (
               <div className={`gate-item ${isOk ? 'gate-item--ok' : 'gate-item--fail'}`} style={{ display: 'flex', alignItems: 'flex-start', gap: '12px', padding: '12px', borderRadius: 'var(--radius-sm)', background: isOk ? 'var(--success-bg)' : 'var(--danger-soft)' }}>
                 {isOk ? (
@@ -449,9 +450,7 @@ export default function PublishPage() {
                   <div style={{ fontSize: '13px', color: isOk ? 'var(--success-text)' : 'var(--danger-text)' }}>
                     {isOk
                       ? 'Усі PII-колонки оброблено обраними методами.'
-                      : (piiErr?.message
-                          ? `${piiErr.message}${piiErr.columns ? `: ${piiErr.columns.join(', ')}` : ''}`
-                          : `Знайдено необроблені PII-колонки: ${(piiErr?.columns ?? []).join(', ')}. Усі персональні дані мають бути знеособлені.`)}
+                      : `Знайдено необроблені PII-колонки${missing.length > 0 ? `: ${missing.join(', ')}` : ''}. Усі персональні дані мають бути знеособлені.`}
                   </div>
                 </div>
               </div>
@@ -479,9 +478,7 @@ export default function PublishPage() {
                       ? hmacCols.length > 0
                         ? `Для колонок із HMAC (${hmacCols.join(', ')}) зареєстровано активну правову підставу.`
                         : 'HMAC-псевдонімізація не використовується (або зареєстровано чинну підставу).'
-                      : (hmacErr?.message
-                          ? `${hmacErr.message}${hmacErr.legal_basis_reason ? ` (${hmacErr.legal_basis_reason})` : ''}`
-                          : `Для колонок із HMAC (${hmacCols.join(', ')}) відсутня активна правова підстава! Зареєструйте згоду чи договір вище.`)}
+                      : `Для колонок із HMAC (${hmacCols.join(', ')}) відсутня активна правова підстава! Зареєструйте згоду чи договір вище.`}
                   </div>
                   <div className="cell-muted" style={{ fontSize: '12px', marginTop: '4px' }}>
                     Для HMAC потрібна чинна правова підстава. Без неї запити можна створити, але власник не зможе їх схвалити.
@@ -509,8 +506,40 @@ export default function PublishPage() {
                   <div style={{ fontSize: '13px', color: isOk ? 'var(--success-text)' : 'var(--danger-text)' }}>
                     {isOk
                       ? `Встановлено термін зберігання: ${formatDate(retentionUntil)}.`
-                      : (retErr?.message || 'Вкажіть коректну дату зберігання у формі вище (дата не раніше ніж завтра).')}
+                      : 'Вкажіть коректну дату зберігання у формі вище (дата не раніше ніж завтра).'}
                   </div>
+                </div>
+              </div>
+            )
+          })()}
+
+          {/* 5. Перевірка правил якості даних (SCRUM-57 quality_blocked) */}
+          {(() => {
+            const qualityErr = gate?.reasons.find((r) => r.code === 'quality_blocked')
+            const isOk = !qualityErr
+            return (
+              <div className={`gate-item ${isOk ? 'gate-item--ok' : 'gate-item--fail'}`} style={{ display: 'flex', alignItems: 'flex-start', gap: '12px', padding: '12px', borderRadius: 'var(--radius-sm)', background: isOk ? 'var(--success-bg)' : 'var(--danger-soft)' }}>
+                {isOk ? (
+                  <IconCheck size={20} style={{ color: 'var(--color-success)', flexShrink: 0, marginTop: '2px' }} />
+                ) : (
+                  <IconX size={20} style={{ color: 'var(--color-danger)', flexShrink: 0, marginTop: '2px' }} />
+                )}
+                <div style={{ flex: 1 }}>
+                  <div className="cell-strong" style={{ color: isOk ? 'var(--success-text)' : 'var(--danger-text)' }}>
+                    Перевірка правил якості (Quality Rules)
+                  </div>
+                  <div style={{ fontSize: '13px', color: isOk ? 'var(--success-text)' : 'var(--danger-text)' }}>
+                    {isOk
+                      ? 'Критичних блокуючих порушень правил якості даних не виявлено.'
+                      : 'Публікацію заблоковано через невиконання критичних правил якості даних.'}
+                  </div>
+                  {!isOk && (
+                    <div style={{ marginTop: 'var(--space-2)' }}>
+                      <Link to={`/datasets/${datasetId}/quality`} className="button button--secondary button--sm">
+                        Переглянути правила якості
+                      </Link>
+                    </div>
+                  )}
                 </div>
               </div>
             )
