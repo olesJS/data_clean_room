@@ -10,9 +10,9 @@ export interface NavItem {
 export const NAV_ITEMS: NavItem[] = [
   { label: 'Мої набори даних', to: '/datasets', roles: ['DataProvider'] },
   { label: 'Імпортувати дані', to: '/upload', roles: ['DataProvider'] },
-  { label: 'Запити на доступ', to: '/access', roles: ['DataProvider'] },
+  { label: 'Запити на доступ', to: '/access', roles: ['DataProvider', 'DataSteward'] },
   { label: 'Каталог', to: '/catalog', roles: ['DataConsumer'] },
-  { label: 'Мої запити', to: '/requests', roles: ['DataConsumer'] },
+  { label: 'Мої запити', to: '/requests', roles: ['DataConsumer', 'DataProvider'] },
   { label: 'Каталог (метадані)', to: '/catalog', roles: ['DataSteward'] },
   { label: 'Журнал аудиту', to: '/audit', roles: ['DataSteward'] },
 ]

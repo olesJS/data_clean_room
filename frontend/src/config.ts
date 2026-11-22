@@ -20,4 +20,11 @@ export const endpoints = {
   datasetQualityViolations: (id: number | string) => `/api/datasets/${id}/quality-violations`,
   datasetAnonymizePreview: (id: number | string) => `/api/datasets/${id}/anonymize/preview`,
   datasetAnonymize: (id: number | string) => `/api/datasets/${id}/anonymize`,
+  catalog: '/api/catalog',
+  requests: '/api/requests',
+  requestApprove: (id: number | string) => `/api/requests/${id}/approve`,
+  requestReject: (id: number | string) => `/api/requests/${id}/reject`,
+  requestDownload: (id: number | string) => `/api/requests/${id}/download`,
+  legalBasis: (id: number | string) => `/api/datasets/${id}/legal-basis`,
+  legalBasisRevoke: (id: string) => `/api/legal-basis/${id}/revoke`,
 }

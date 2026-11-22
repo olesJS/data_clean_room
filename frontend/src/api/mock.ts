@@ -5,9 +5,13 @@ import type {
   AnonymizationPreview,
   AnonymizationPreviewRow,
   AnonymizedVersion,
+  CatalogItem,
   DataClass,
   DatasetProfileResponse,
   DatasetVersion,
+  ExchangeRequest,
+  LegalBasis,
+  LegalBasisCreatePayload,
   LoginResponse,
   PiiFinding,
   PiiScanResponse,
@@ -705,4 +709,343 @@ export async function mockApplyAnonymization(
     data_class: hasHmac ? 'Personal' : 'Confidential',
     created_at: new Date().toISOString(),
   }
+}
+
+// ─── Sprint 3: Mock каталогу, запитів на обмін та правових підстав (UC-08 – UC-12) ─
+
+export const mockCatalogData: CatalogItem[] = [
+  {
+    id: 101,
+    name: 'payroll_clean.csv',
+    data_class: 'Personal',
+    row_count: 500,
+    quality_score: 96,
+    anonymization_methods: [
+      { column: 'ipn', method: 'hmac' },
+      { column: 'birth_date', method: 'generalize' },
+    ],
+    uploaded_by: 'provider@example.com',
+    created_at: '2026-11-20T12:00:00Z',
+    retention_until: '2027-12-31',
+    column_count: 5,
+  },
+  {
+    id: 103,
+    name: 'customers_clean.json',
+    data_class: 'Confidential',
+    row_count: 300,
+    quality_score: 94,
+    anonymization_methods: [
+      { column: 'email', method: 'mask' },
+      { column: 'phone', method: 'mask' },
+    ],
+    uploaded_by: 'provider@example.com',
+    created_at: '2026-11-21T09:30:00Z',
+    retention_until: '2028-06-30',
+    column_count: 6,
+  },
+  {
+    id: 105,
+    name: 'store_catalog.csv',
+    data_class: 'Public',
+    row_count: 1200,
+    quality_score: 99,
+    anonymization_methods: [],
+    uploaded_by: 'provider@example.com',
+    created_at: '2026-11-21T15:00:00Z',
+    retention_until: '2029-01-01',
+    column_count: 8,
+  },
+]
+
+export const mockLegalBasesStore: Record<number, LegalBasis[]> = {
+  101: [
+    {
+      id: 'lb-101-1',
+      dataset_id: 101,
+      type: 'consent',
+      document_ref: 'Згода суб’єктів персональних даних №101/2026',
+      date: '2026-11-01',
+      purpose: 'analytics',
+      valid_until: '2027-12-31',
+      entered_by: 1,
+      created_at: '2026-11-01T10:00:00Z',
+      revoked_at: null,
+      revoked_by: null,
+      revoked_reason: null,
+      is_active: true,
+    },
+  ],
+  103: [
+    {
+      id: 'lb-103-1',
+      dataset_id: 103,
+      type: 'contract',
+      document_ref: 'Договір приєднання на обробку №К-45',
+      date: '2026-10-15',
+      purpose: 'research',
+      valid_until: '2028-06-30',
+      entered_by: 1,
+      created_at: '2026-10-15T12:00:00Z',
+      revoked_at: null,
+      revoked_by: null,
+      revoked_reason: null,
+      is_active: true,
+    },
+  ],
+}
+
+export const mockRequestsStore: ExchangeRequest[] = [
+  {
+    id: 1,
+    dataset_id: 101,
+    dataset_name: 'payroll_clean.csv',
+    dataset_class: 'Personal',
+    consumer_id: 2,
+    consumer_email: 'consumer@example.com',
+    purpose: 'analytics',
+    status: 'approved',
+    review_comment: 'Погоджено для квартального фінансового аналізу',
+    created_at: '2026-11-21T10:00:00Z',
+    reviewed_at: '2026-11-21T11:00:00Z',
+  },
+  {
+    id: 2,
+    dataset_id: 103,
+    dataset_name: 'customers_clean.json',
+    dataset_class: 'Confidential',
+    consumer_id: 2,
+    consumer_email: 'consumer@example.com',
+    purpose: 'research',
+    status: 'pending',
+    review_comment: null,
+    created_at: '2026-11-21T14:30:00Z',
+    reviewed_at: null,
+  },
+  {
+    id: 3,
+    dataset_id: 101,
+    dataset_name: 'payroll_clean.csv',
+    dataset_class: 'Personal',
+    consumer_id: 3,
+    consumer_email: 'analyst@example.com',
+    purpose: 'publication',
+    status: 'rejected',
+    review_comment: 'Відхилено: публікація персональних даних заборонена',
+    created_at: '2026-11-20T08:00:00Z',
+    reviewed_at: '2026-11-20T09:15:00Z',
+  },
+]
+
+export async function mockCatalog(): Promise<CatalogItem[]> {
+  await delay(300)
+  return [...mockCatalogData]
+}
+
+export async function mockExchangeRequests(): Promise<ExchangeRequest[]> {
+  await delay(350)
+  const role = storage.getRole()
+  const email = storage.getEmail()
+
+  if (role === 'DataConsumer') {
+    return mockRequestsStore.filter(
+      (r) => r.consumer_email === (email ?? 'consumer@example.com'),
+    )
+  }
+  return [...mockRequestsStore]
+}
+
+export async function mockCreateExchangeRequest(
+  datasetId: number,
+  purpose: string,
+): Promise<ExchangeRequest> {
+  await delay(400)
+  const email = storage.getEmail() ?? 'consumer@example.com'
+  const catalogItem = mockCatalogData.find((d) => d.id === datasetId)
+
+  // Перевірка на дублювання активного запиту
+  const exists = mockRequestsStore.find(
+    (r) =>
+      r.dataset_id === datasetId &&
+      r.consumer_email === email &&
+      (r.status === 'pending' || r.status === 'Requested'),
+  )
+  if (exists) {
+    throw new ApiError('Активний запит на цей набір уже існує', 409)
+  }
+
+  const newReq: ExchangeRequest = {
+    id: mockRequestsStore.length + 1,
+    dataset_id: datasetId,
+    dataset_name: catalogItem?.name ?? `dataset-${datasetId}`,
+    dataset_class: catalogItem?.data_class ?? 'Internal',
+    consumer_id: 2,
+    consumer_email: email,
+    purpose,
+    status: 'pending',
+    review_comment: null,
+    created_at: new Date().toISOString(),
+    reviewed_at: null,
+  }
+
+  mockRequestsStore.unshift(newReq)
+  return newReq
+}
+
+export async function mockApproveExchangeRequest(
+  id: number,
+  comment?: string,
+): Promise<ExchangeRequest> {
+  await delay(400)
+  const req = mockRequestsStore.find((r) => r.id === id)
+  if (!req) {
+    throw new ApiError('Запит не знайдено', 404)
+  }
+
+  // Перевірка чинності правової підстави
+  const bases = mockLegalBasesStore[req.dataset_id] ?? []
+  const hasActiveBasis = bases.some(
+    (b) =>
+      b.is_active &&
+      !b.revoked_at &&
+      (b.purpose.toLowerCase() === req.purpose.toLowerCase() ||
+        req.purpose.toLowerCase().includes(b.purpose.toLowerCase())),
+  )
+
+  const isRevoked = bases.some((b) => b.revoked_at !== null)
+
+  if (!hasActiveBasis) {
+    const reason = isRevoked
+      ? 'revoked'
+      : bases.length === 0
+        ? 'no_legal_basis'
+        : 'purpose_mismatch'
+    throw new ApiError(`Cannot approve request: legal basis invalid (${reason})`, 409)
+  }
+
+  req.status = 'approved'
+  req.review_comment = comment ?? 'Схвалено'
+  req.reviewed_at = new Date().toISOString()
+  return { ...req }
+}
+
+export async function mockRejectExchangeRequest(
+  id: number,
+  comment?: string,
+): Promise<ExchangeRequest> {
+  await delay(400)
+  const req = mockRequestsStore.find((r) => r.id === id)
+  if (!req) {
+    throw new ApiError('Запит не знайдено', 404)
+  }
+
+  req.status = 'rejected'
+  req.review_comment = comment ?? 'Відхилено'
+  req.reviewed_at = new Date().toISOString()
+  return { ...req }
+}
+
+export async function mockDownloadExchangeFile(
+  id: number,
+  fallbackName = 'clean_dataset.csv',
+): Promise<void> {
+  await delay(500)
+  const req = mockRequestsStore.find((r) => r.id === id)
+  if (!req) {
+    throw new ApiError('Запит не знайдено', 404)
+  }
+
+  if (req.status !== 'approved' && req.status !== 'Approved' && req.status !== 'downloaded') {
+    throw new ApiError(`Завантаження неможливе для статусу ${req.status}`, 403)
+  }
+
+  // Перевірка чи не відкликана підстава
+  const bases = mockLegalBasesStore[req.dataset_id] ?? []
+  const isRevoked = bases.some((b) => b.revoked_at !== null)
+  if (isRevoked) {
+    throw new ApiError('Згоду або правову підставу відкликано — завантаження неможливе.', 403)
+  }
+
+  req.status = 'downloaded'
+
+  // Створення зразка файлу у браузері
+  const content = `id,name,value\n1,Sample_Clean_1,***\n2,Sample_Clean_2,***\n`
+  const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const anchor = document.createElement('a')
+  anchor.href = url
+  anchor.download = fallbackName
+  document.body.appendChild(anchor)
+  anchor.click()
+  anchor.remove()
+  URL.revokeObjectURL(url)
+}
+
+export async function mockLegalBasis(datasetId: number | string): Promise<LegalBasis[]> {
+  await delay(300)
+  const numId = Number(datasetId)
+  if (!mockLegalBasesStore[numId]) {
+    mockLegalBasesStore[numId] = [
+      {
+        id: `lb-${numId}-1`,
+        dataset_id: numId,
+        type: 'consent',
+        document_ref: `Згода на обробку персональних даних для набору #${numId}`,
+        date: new Date().toISOString().slice(0, 10),
+        purpose: 'analytics',
+        valid_until: '2027-12-31',
+        entered_by: 1,
+        created_at: new Date().toISOString(),
+        revoked_at: null,
+        revoked_by: null,
+        revoked_reason: null,
+        is_active: true,
+      },
+    ]
+  }
+  return [...mockLegalBasesStore[numId]]
+}
+
+export async function mockCreateLegalBasis(
+  datasetId: number | string,
+  payload: LegalBasisCreatePayload,
+): Promise<LegalBasis> {
+  await delay(400)
+  const numId = Number(datasetId)
+  const entry: LegalBasis = {
+    id: `lb-${numId}-${Date.now()}`,
+    dataset_id: numId,
+    type: payload.type,
+    document_ref: payload.document_ref,
+    date: payload.date,
+    purpose: payload.purpose,
+    valid_until: payload.valid_until ?? null,
+    entered_by: 1,
+    created_at: new Date().toISOString(),
+    revoked_at: null,
+    revoked_by: null,
+    revoked_reason: null,
+    is_active: true,
+  }
+  if (!mockLegalBasesStore[numId]) mockLegalBasesStore[numId] = []
+  mockLegalBasesStore[numId].unshift(entry)
+  return entry
+}
+
+export async function mockRevokeLegalBasis(
+  id: string,
+  reason: string,
+): Promise<LegalBasis> {
+  await delay(400)
+  for (const list of Object.values(mockLegalBasesStore)) {
+    const found = list.find((item) => item.id === id)
+    if (found) {
+      found.revoked_at = new Date().toISOString()
+      found.revoked_by = 1
+      found.revoked_reason = reason
+      found.is_active = false
+      return { ...found }
+    }
+  }
+  throw new ApiError('Правову підставу не знайдено', 404)
 }

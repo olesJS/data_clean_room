@@ -215,3 +215,108 @@ export interface AnonymizedVersion {
   applied_columns?: string[] | Record<string, string>
   created_at: string
 }
+
+// ─── Sprint 3: Правові підстави та Обмін даними (UC-07 – UC-10, UC-12) ─────────
+
+export type LegalBasisType = 'consent' | 'contract' | 'law'
+export type LegalBasisPurpose = 'analytics' | 'research' | 'reporting' | 'publication'
+
+export const LEGAL_BASIS_TYPE_LABELS: Record<LegalBasisType, string> = {
+  consent: 'Згода суб’єкта (consent)',
+  contract: 'Договір (contract)',
+  law: 'Закон / обов’язок (law)',
+}
+
+export const LEGAL_BASIS_PURPOSE_LABELS: Record<LegalBasisPurpose, string> = {
+  analytics: 'Аналітика (analytics)',
+  research: 'Наукові дослідження (research)',
+  reporting: 'Звітність (reporting)',
+  publication: 'Публікація (publication)',
+}
+
+export interface LegalBasis {
+  id: string
+  dataset_id: number
+  type: LegalBasisType
+  document_ref: string
+  date: string
+  purpose: LegalBasisPurpose
+  valid_until: string | null
+  entered_by: number
+  created_at: string
+  revoked_at: string | null
+  revoked_by: number | null
+  revoked_reason: string | null
+  is_active: boolean
+}
+
+export interface LegalBasisCreatePayload {
+  type: LegalBasisType
+  document_ref: string
+  date: string
+  purpose: LegalBasisPurpose
+  valid_until?: string | null
+}
+
+export interface AnonymizationAppliedMethod {
+  column: string
+  method: string
+}
+
+export interface CatalogItem {
+  id: number
+  name: string
+  data_class: DataClass
+  row_count: number
+  quality_score: number | null
+  anonymization_methods: AnonymizationAppliedMethod[]
+  uploaded_by: string
+  created_at: string | null
+  retention_until?: string | null
+  column_count?: number
+}
+
+export type ExchangeRequestStatus =
+  | 'pending'
+  | 'approved'
+  | 'rejected'
+  | 'downloaded'
+  | 'Requested'
+  | 'Approved'
+  | 'Rejected'
+  | 'Downloaded'
+
+export const EXCHANGE_STATUS_LABELS: Record<string, string> = {
+  pending: 'Очікує рішення',
+  approved: 'Схвалено',
+  rejected: 'Відхилено',
+  downloaded: 'Завантажено',
+  Requested: 'Очікує рішення',
+  Approved: 'Схвалено',
+  Rejected: 'Відхилено',
+  Downloaded: 'Завантажено',
+}
+
+export interface ExchangeRequest {
+  id: number
+  dataset_id: number
+  dataset_name?: string | null
+  dataset_class?: DataClass | null
+  consumer_id?: number
+  consumer_email?: string | null
+  purpose: string
+  status: ExchangeRequestStatus | string
+  review_comment?: string | null
+  created_at?: string | null
+  reviewed_at?: string | null
+  access_until?: string | null
+}
+
+export interface CreateExchangeRequestPayload {
+  dataset_id: number
+  purpose: string
+}
+
+export interface ReviewExchangeRequestPayload {
+  comment?: string | null
+}

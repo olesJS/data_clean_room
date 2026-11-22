@@ -6,6 +6,7 @@ import { ClassBadge } from '../components/Badges'
 import { Button } from '../components/Button'
 import { ErrorMessage } from '../components/ErrorMessage'
 import { Histogram } from '../components/Histogram'
+import { LegalBasisPanel } from '../components/LegalBasisPanel'
 import { QualityScoreHero } from '../components/QualityScoreHero'
 import {
   IconAlert,
@@ -49,7 +50,7 @@ export default function ProfilePage() {
   const [selectedType, setSelectedType] = useState<string>('all')
   const [issuesOnly, setIssuesOnly] = useState(false)
   const [expandedCols, setExpandedCols] = useState<Record<string, boolean>>({})
-  const [activeTab, setActiveTab] = useState<'columns' | 'histograms'>('columns')
+  const [activeTab, setActiveTab] = useState<'columns' | 'histograms' | 'legal-basis'>('columns')
 
   const loadProfile = useCallback(async () => {
     setLoading(true)
@@ -235,6 +236,16 @@ export default function ProfilePage() {
               >
                 <IconBarChart size={16} />
                 <span>Гістограми розподілу ({numericHistogramColumns.length})</span>
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={activeTab === 'legal-basis'}
+                className={`tab-btn${activeTab === 'legal-basis' ? ' is-active' : ''}`}
+                onClick={() => setActiveTab('legal-basis')}
+              >
+                <IconShield size={16} />
+                <span>Правова підстава (UC-07, UC-12)</span>
               </button>
             </div>
 
@@ -543,6 +554,13 @@ export default function ProfilePage() {
                   ))}
                 </div>
               )}
+            </section>
+          )}
+
+          {/* Вкладка: Правова підстава та згода (UC-07, UC-12) */}
+          {activeTab === 'legal-basis' && (
+            <section className="legal-basis-section" style={{ marginTop: 'var(--space-4)' }}>
+              <LegalBasisPanel datasetId={datasetId} />
             </section>
           )}
         </>
