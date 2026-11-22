@@ -163,6 +163,7 @@ export interface QualityReport {
   can_publish: boolean
   has_blocking_violations: boolean
   action_counts: Record<QualityAction, number>
+  duplicated_rows_count?: number
   summary?: { duplicate_rows_count?: number }
   violations: QualityViolation[]
 }

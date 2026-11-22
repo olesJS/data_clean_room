@@ -1,5 +1,5 @@
 // frontend/src/pages/QualityRulesPage.tsx
-// Екран «Правила якості та порушення набору» (UC-04, SCRUM-49).
+// Екран «Правила якості та порушення набору» (UC-04, SCRUM-49 / SCRUM-73).
 // Маршрут: /datasets/:id/quality. Стилі: блок «Quality rules» у styles/global.css.
 
 import { useEffect, useMemo, useState } from 'react'
@@ -201,7 +201,7 @@ function Report({ rules, report }: { rules: QualityRule[]; report: QualityReport
     () => (selected ? report.violations.filter((v) => v.action === selected) : report.violations),
     [report.violations, selected],
   )
-  const duplicateRows = report.summary?.duplicate_rows_count
+  const duplicateRows = report.summary?.duplicate_rows_count ?? report.duplicated_rows_count
 
   return (
     <>
