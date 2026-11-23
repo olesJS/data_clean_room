@@ -335,7 +335,7 @@
 | 5 | Consumer | Каталог → `payroll` → «Запросити доступ», мета «Аналітика» | Запит «Очікує» |
 | 6 | Provider | «Запити на доступ» → «Схвалити» | Статус «Схвалено» |
 | 7 | Consumer | «Мої запити» → «Завантажити» | Файл `payroll_clean.csv` без сирих ІПН, IBAN і ПІБ |
-| 8 | Steward | «Журнал аудиту» | Послідовність `UPLOAD_DATASET` → `PII_SCAN` → `ANONYMIZE` → `PUBLISH` → `REQUEST` → `REQUEST_APPROVED` → `DOWNLOAD`, у записах немає значень PII |
+| 8 | Steward | «Журнал аудиту» | Послідовність `PII_SCAN` → `UPLOAD_DATASET` → `ANONYMIZE` → `PUBLISH` → `CREATE_LEGAL_BASIS` → `REQUEST` → `REQUEST_APPROVED` → `DOWNLOAD` (сканування PII пишеться ще під час завантаження, тому йде першим), у записах немає значень PII |
 
 ### TC-E2E.2 Негативна гілка для демо: відкликання згоди · P1 · вручну
 | # | Роль | Дія | Очікування |
@@ -410,6 +410,23 @@
 
 ## 11. Зв'язок з автотестами
 
-- Автотестами вже покрито **32 з 45** кейсів (повністю або частково; TC-N5.4 — через compose smoke у CI): `test_anonymizer.py`, `test_publication_gate.py`, `test_exchange.py`, `test_legal_basis_revocation.py`, `test_legal_basis_service.py`.
-- Не покрито автотестами — це обсяг **SCRUM-68**: TC-N5.3, TC-N7.1 – TC-N7.4, TC-08.2, TC-N8.2 (a–c на рівні API обміну), TC-N8.3, TC-N8.4, TC-09.2, TC-N9.1, TC-N9.4, а також перевірка відсутності сирих PII у завантаженому файлі (TC-09.1) і повної послідовності подій аудиту (TC-E2E.1, крок 8).
-- Нові ендпоінти Спринту 3 додаються в `MATRIX` у `test_rbac_matrix.py` (SCRUM-51 / SCRUM-68).
+- Покриті раніше (32 з 45 кейсів, повністю або частково; TC-N5.4 — через compose smoke у CI): `test_anonymizer.py`, `test_publication_gate.py`, `test_exchange.py`, `test_legal_basis_revocation.py`, `test_legal_basis_service.py`.
+- Додано в **SCRUM-68**, файл `backend/tests/test_exchange_negative.py`:
+
+| Кейс | Тест |
+| --- | --- |
+| TC-N5.3 | `test_invalid_anonymization_request_returns_422` (невідомий метод, відсутня колонка, недопустиме узагальнення; preview і застосування) |
+| TC-N7.1 | `test_request_for_unpublished_dataset_returns_404` |
+| TC-N7.2 | `test_only_consumer_can_create_request` |
+| TC-N7.3 | `test_duplicate_pending_request_returns_409` |
+| TC-N7.4 | `test_short_purpose_is_rejected` |
+| TC-08.2 | `test_rejected_request_cannot_be_downloaded` |
+| TC-N8.2 (a–c) | `test_approve_without_valid_basis_is_blocked` |
+| TC-N8.3 | `test_repeated_decision_returns_409` |
+| TC-N8.4 | `test_review_missing_request_returns_404` |
+| TC-N9.1 | `test_download_of_not_approved_request_is_denied` |
+| TC-N9.4 | `test_repeat_download_is_allowed_while_basis_is_valid` — `xfail(strict=True)`, баг **SCRUM-74** |
+| TC-09.1, TC-09.2, TC-E2E.1 крок 8 | `test_json_dataset_end_to_end_without_raw_pii` |
+
+- Разом автотестами покрито **44 з 45** кейсів. TC-N9.4 зафіксовано як відомий дефект і стане зеленим після SCRUM-74. TC-E2E.2 (UI-демо відкликання) лишається ручним прогоном перед захистом.
+- Ролеві перевірки нових ендпоінтів Спринту 3 (п'ять ролей, включно з чужим Provider) — у `RESOURCE_MATRIX` у `test_rbac_matrix.py` (SCRUM-51), опис у `docs/testing/rbac-matrix.md`.
