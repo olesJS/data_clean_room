@@ -6,20 +6,36 @@
 Кожен рядок матриці є окремим тест-кейсом. Для кожної відмови (401, 403)
 перевіряється запис у журналі аудиту. Новий ендпоінт додається рядком у MATRIX.
 
-Обсяг: ендпоінти, які є в main. Ендпоінти PR #15 і #18 (правова підстава,
-профіль, PII, видалення) додаються після їх злиття в задачі SCRUM-51.
+Частина 1 (MATRIX): ендпоінти без конкретного ресурсу в шляху.
+Частина 2 (RESOURCE_MATRIX, SCRUM-51): ендпоінти з ідентифікатором набору,
+правової підстави чи запиту. Для них є п'ята роль «чужий Provider», який
+за рішенням PO №8 отримує 404, а не 403. Кожен кейс отримує свіжий набір
+ресурсів (фікстура world), тож змінювальні виклики не впливають один на одного.
 """
 
 import io
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 
 import jwt
 import pytest
 from sqlalchemy import func
 
-from app.auth import ALGORITHM, SECRET_KEY, create_access_token
-from app.models import AuditLog, Dataset
+from app.auth import ALGORITHM, SECRET_KEY, create_access_token, hash_password
+from app.models import (
+    AnonymizationMethod,
+    AnonymizationMethodType,
+    AuditLog,
+    Dataset,
+    DatasetVersion,
+    DatasetVersionKind,
+    ExchangeRequest,
+    ExchangeRequestStatus,
+    LegalBasis,
+    LegalBasisPurpose,
+    LegalBasisType,
+    User,
+)
 
 ANON = "anon"
 USERS = {
@@ -259,3 +275,370 @@ def test_consumer_does_not_see_unpublished_datasets(client):
     listed = client.get("/datasets", headers=_headers("consumer")).json()
 
     assert all(d["original_filename"] != filename for d in listed)
+
+
+# ---------------------------------------------------------------------------
+# Частина 2. Ендпоінти з ресурсом у шляху (SCRUM-51)
+# ---------------------------------------------------------------------------
+#
+# Ролі: ANON, "provider" (власник набору), OTHER (інший Data Provider),
+# "consumer", "steward". Шлях і тіло містять плейсхолдери, які
+# підставляються з фікстури world:
+#   {draft}     набір у статусі uploaded з чистою версією і методами
+#               анонімізації (готовий до публікації)
+#   {published} опублікований набір з активною підставою analytics
+#   {spare}     опублікований набір без запитів (для створення запиту)
+#   {basis}     активна правова підстава набору {published}
+#   {pending}   запит Consumer у статусі pending на {published}
+#   {approved}  запит Consumer у статусі approved на {published}
+
+OTHER = "other_provider"
+RESOURCE_ROLES = (ANON, "provider", OTHER, "consumer", "steward")
+FUTURE = (date.today() + timedelta(days=365)).isoformat()
+
+
+def _codes(anon, owner, other, consumer, steward):
+    return dict(zip(RESOURCE_ROLES, (anon, owner, other, consumer, steward)))
+
+
+# (метод, шаблон шляху, тіло або None) -> коди для п'яти ролей
+RESOURCE_MATRIX = {
+    # UC-04/UC-05: профіль і PII читають власник і Steward
+    ("GET", "/api/datasets/{draft}/profile", None): _codes(401, 200, 404, 403, 200),
+    ("GET", "/api/datasets/{draft}/pii", None): _codes(401, 200, 404, 403, 200),
+    # UC-05: класифікацію PII змінює лише власник (рішення PO №1)
+    (
+        "PATCH",
+        "/api/datasets/{draft}/pii/email",
+        (("user_confirmed", True),),
+    ): _codes(401, 200, 404, 403, 403),
+    # Якість даних: Consumer не бачить деталей
+    ("GET", "/api/datasets/{draft}/quality-rules", None): _codes(
+        401, 200, 404, 403, 200
+    ),
+    ("GET", "/api/datasets/{draft}/quality-violations", None): _codes(
+        401, 200, 404, 403, 200
+    ),
+    # UC-13: правова підстава — власник або Steward
+    (
+        "POST",
+        "/api/datasets/{draft}/legal-basis",
+        (
+            ("type", "consent"),
+            ("document_ref", "RBAC-DOC-1"),
+            ("date", date.today().isoformat()),
+            ("purpose", "analytics"),
+            ("valid_until", FUTURE),
+        ),
+    ): _codes(401, 201, 404, 403, 201),
+    ("GET", "/api/datasets/{draft}/legal-basis", None): _codes(401, 200, 404, 403, 200),
+    # UC-14: відкликання — власник або Steward
+    (
+        "POST",
+        "/api/legal-basis/{basis}/revoke",
+        (("reason", "RBAC matrix check"),),
+    ): _codes(401, 200, 404, 403, 200),
+    # UC-06: анонімізація — лише власник
+    (
+        "POST",
+        "/api/datasets/{draft}/anonymize/preview",
+        (("columns", (("email", "mask"),)),),
+    ): _codes(401, 200, 404, 403, 403),
+    (
+        "POST",
+        "/api/datasets/{draft}/anonymize",
+        (("columns", (("email", "mask"),)),),
+    ): _codes(401, 200, 404, 403, 403),
+    # UC-07: перевірка і публікація — лише власник
+    ("GET", "/api/datasets/{draft}/publish/check", None): _codes(
+        401, 200, 404, 403, 403
+    ),
+    (
+        "POST",
+        "/api/datasets/{draft}/publish",
+        (("retention_until", FUTURE),),
+    ): _codes(401, 200, 404, 403, 403),
+    # UC-08: каталог — будь-яка автентифікована роль
+    ("GET", "/api/catalog", None): _codes(401, 200, 200, 200, 200),
+    # UC-08: запит створює лише Consumer
+    (
+        "POST",
+        "/api/requests",
+        (("dataset_id", "{spare}"), ("purpose", "analytics of regional payments")),
+    ): _codes(401, 403, 403, 201, 403),
+    # Список запитів: кожна роль бачить свою частину
+    ("GET", "/api/requests", None): _codes(401, 200, 200, 200, 200),
+    # UC-09: рішення ухвалює власник набору (не Steward)
+    (
+        "POST",
+        "/api/requests/{pending}/approve",
+        (("comment", "ok"),),
+    ): _codes(401, 200, 404, 403, 403),
+    (
+        "POST",
+        "/api/requests/{pending}/reject",
+        (("comment", "no"),),
+    ): _codes(401, 200, 404, 403, 403),
+    # UC-10: завантажує лише автор запиту; для інших запит «не існує»
+    ("GET", "/api/requests/{approved}/download", None): _codes(401, 404, 404, 200, 404),
+}
+
+RESOURCE_CASES = [
+    (method, path, body, role, code)
+    for (method, path, body), expected in RESOURCE_MATRIX.items()
+    for role, code in expected.items()
+]
+RESOURCE_DENIED_CASES = [c for c in RESOURCE_CASES if c[4] in (401, 403)]
+
+
+def _resource_case_id(case):
+    method, path, _body, role, code = case
+    return f"{role}-{method}-{path}-{code}"
+
+
+def _to_dict(pairs):
+    """Кортежі пар (хешовані для ключів словника) -> звичайний dict."""
+    if not isinstance(pairs, tuple):
+        return pairs
+    return {key: _to_dict(value) for key, value in pairs}
+
+
+def _fill(value, world):
+    if isinstance(value, str):
+        filled = value.format(**world["ids"])
+        if value.startswith("{") and value.endswith("}"):
+            return int(filled)
+        return filled
+    if isinstance(value, dict):
+        return {key: _fill(item, world) for key, item in value.items()}
+    return value
+
+
+def _resource_headers(role, world):
+    if role == ANON:
+        return {}
+    email = world["other_email"] if role == OTHER else USERS[role]
+    return {"Authorization": f"Bearer {create_access_token({'sub': email})}"}
+
+
+def _resource_actor(role, world):
+    if role == ANON:
+        return "unauthenticated"
+    return world["other_email"] if role == OTHER else USERS[role]
+
+
+def _resource_call(client, method, path, body, headers):
+    if method == "GET":
+        return client.get(path, headers=headers)
+    return client.request(method, path, headers=headers, json=body)
+
+
+def _rbac_dataset(db_session, tmp_path, *, status):
+    raw = tmp_path / f"rbac-raw-{uuid.uuid4().hex}.csv"
+    raw.write_text(
+        "person_name,email,amount\n"
+        "Іван Петренко,ivan.petrenko@example.com,100\n"
+        "Олена Коваль,olena.koval@example.com,200\n",
+        encoding="utf-8",
+    )
+    dataset = Dataset(
+        name=f"RBAC {uuid.uuid4().hex[:8]}",
+        original_filename=raw.name,
+        file_path=str(raw),
+        file_size=raw.stat().st_size,
+        file_type="csv",
+        columns={"person_name": "object", "email": "object", "amount": "int64"},
+        row_count=2,
+        uploaded_by=USERS["provider"],
+        data_class="Personal",
+        status=status,
+        pii_json=[
+            {
+                "column_name": column,
+                "pii_type": column,
+                "confidence": 0.95,
+                "detection_method": "regex",
+                "user_confirmed": None,
+                "corrected_pii_type": None,
+            }
+            for column in ("person_name", "email")
+        ],
+    )
+    db_session.add(dataset)
+    db_session.commit()
+    db_session.refresh(dataset)
+
+    clean = tmp_path / f"rbac-clean-{dataset.id}.csv"
+    clean.write_text(
+        "person_name,email,amount\nІ***о,i***@e***.com,100\nО***ь,o***@e***.com,200\n",
+        encoding="utf-8",
+    )
+    db_session.add(
+        DatasetVersion(
+            dataset_id=dataset.id,
+            kind=DatasetVersionKind.CLEAN,
+            file_path=str(clean),
+            sha256=uuid.uuid4().hex,
+            row_count=2,
+        )
+    )
+    for column in ("person_name", "email"):
+        db_session.add(
+            AnonymizationMethod(
+                dataset_id=dataset.id,
+                column_name=column,
+                method=AnonymizationMethodType.MASK,
+            )
+        )
+    db_session.commit()
+    return dataset
+
+
+@pytest.fixture
+def world(db_session, tmp_path):
+    other = User(
+        email=f"rbac-other-{uuid.uuid4().hex[:8]}@example.com",
+        hashed_password=hash_password("password123"),
+        role="DataProvider",
+    )
+    db_session.add(other)
+    db_session.commit()
+
+    consumer = db_session.query(User).filter_by(email=USERS["consumer"]).one()
+    steward = db_session.query(User).filter_by(email=USERS["steward"]).one()
+
+    draft = _rbac_dataset(db_session, tmp_path, status="uploaded")
+    published = _rbac_dataset(db_session, tmp_path, status="published")
+    spare = _rbac_dataset(db_session, tmp_path, status="published")
+
+    basis = LegalBasis(
+        dataset_id=published.id,
+        type=LegalBasisType.CONSENT,
+        document_ref="RBAC-DOC-0",
+        date=date.today(),
+        purpose=LegalBasisPurpose.ANALYTICS,
+        valid_until=date.today() + timedelta(days=365),
+        entered_by=steward.id,
+    )
+    pending = ExchangeRequest(
+        dataset_id=published.id,
+        consumer_id=consumer.id,
+        purpose="analytics of regional payments",
+        status=ExchangeRequestStatus.PENDING,
+    )
+    approved = ExchangeRequest(
+        dataset_id=published.id,
+        consumer_id=consumer.id,
+        purpose="analytics of regional payments",
+        status=ExchangeRequestStatus.APPROVED,
+    )
+    db_session.add_all([basis, pending, approved])
+    db_session.commit()
+
+    return {
+        "other_email": other.email,
+        "ids": {
+            "draft": draft.id,
+            "published": published.id,
+            "spare": spare.id,
+            "basis": basis.id,
+            "pending": pending.id,
+            "approved": approved.id,
+        },
+    }
+
+
+# 7. Матриця для ендпоінтів з ресурсом: п'ять ролей, включно з чужим Provider
+
+
+@pytest.mark.parametrize(
+    "method,path,body,role,expected",
+    RESOURCE_CASES,
+    ids=[_resource_case_id(c) for c in RESOURCE_CASES],
+)
+def test_resource_rbac_matrix(client, world, method, path, body, role, expected):
+    url = _fill(path, world)
+    payload = _fill(_to_dict(body), world)
+
+    res = _resource_call(client, method, url, payload, _resource_headers(role, world))
+
+    assert res.status_code == expected, (
+        f"{role} {method} {url}: очікувано {expected}, "
+        f"отримано {res.status_code} ({res.text})"
+    )
+
+
+# 8. Кожна відмова 401/403 на ресурсних ендпоінтах пишеться в аудит.
+# Назва дії різниться між роутерами (ACCESS_DENIED, VIEW_PII, CREATE_LEGAL_BASIS
+# тощо), тому інваріант такий: +1 запис з цим actor і result UNAUTHORIZED/FORBIDDEN.
+
+
+@pytest.mark.parametrize(
+    "method,path,body,role,expected",
+    RESOURCE_DENIED_CASES,
+    ids=[_resource_case_id(c) for c in RESOURCE_DENIED_CASES],
+)
+def test_resource_denial_is_audited(
+    client, db_session, world, method, path, body, role, expected
+):
+    url = _fill(path, world)
+    payload = _fill(_to_dict(body), world)
+    result = "UNAUTHORIZED" if expected == 401 else "FORBIDDEN"
+    filters = {"actor": _resource_actor(role, world), "result": result}
+    before = _audit_count(db_session, **filters)
+
+    res = _resource_call(client, method, url, payload, _resource_headers(role, world))
+
+    assert res.status_code == expected
+    assert _audit_count(db_session, **filters) == before + 1
+
+
+# 9. Відмова не змінює стан ресурсу
+
+
+@pytest.mark.parametrize("role", ["consumer", "steward", OTHER])
+def test_denied_publish_does_not_publish(client, db_session, world, role):
+    dataset_id = world["ids"]["draft"]
+
+    res = client.post(
+        f"/api/datasets/{dataset_id}/publish",
+        json={"retention_until": FUTURE},
+        headers=_resource_headers(role, world),
+    )
+
+    assert res.status_code in (403, 404)
+    db_session.expire_all()
+    assert db_session.get(Dataset, dataset_id).status == "uploaded"
+
+
+@pytest.mark.parametrize("role", ["consumer", "steward", OTHER])
+@pytest.mark.parametrize("action", ["approve", "reject"])
+def test_denied_review_keeps_request_pending(client, db_session, world, role, action):
+    request_id = world["ids"]["pending"]
+
+    res = client.post(
+        f"/api/requests/{request_id}/{action}",
+        json={"comment": "intruder"},
+        headers=_resource_headers(role, world),
+    )
+
+    assert res.status_code in (403, 404)
+    db_session.expire_all()
+    req = db_session.get(ExchangeRequest, request_id)
+    assert req.status == ExchangeRequestStatus.PENDING
+    assert req.reviewed_by is None
+
+
+@pytest.mark.parametrize("role", ["consumer", OTHER])
+def test_denied_revoke_keeps_basis_active(client, db_session, world, role):
+    basis_id = world["ids"]["basis"]
+
+    res = client.post(
+        f"/api/legal-basis/{basis_id}/revoke",
+        json={"reason": "intruder"},
+        headers=_resource_headers(role, world),
+    )
+
+    assert res.status_code in (403, 404)
+    db_session.expire_all()
+    assert db_session.get(LegalBasis, basis_id).revoked_at is None
