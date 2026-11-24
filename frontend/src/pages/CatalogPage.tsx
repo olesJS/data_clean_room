@@ -201,12 +201,16 @@ export default function CatalogPage() {
                   <strong
                     style={{
                       color:
-                        item.quality_score !== null && item.quality_score >= 0.8
+                        item.quality_score !== null && item.quality_score >= 80
                           ? 'var(--color-success)'
-                          : 'var(--color-warning)',
+                          : item.quality_score !== null && item.quality_score >= 50
+                          ? 'var(--color-warning)'
+                          : item.quality_score !== null
+                          ? 'var(--color-danger)'
+                          : undefined,
                     }}
                   >
-                    {item.quality_score !== null ? `${Math.round(item.quality_score * 100)}%` : '—'}
+                    {item.quality_score !== null ? `${Math.round(item.quality_score)}%` : '—'}
                   </strong>
                 </div>
               </div>
