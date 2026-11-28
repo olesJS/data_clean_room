@@ -115,13 +115,21 @@
 | `GET /api/datasets` | бачить свій набір, `status: "expired"` | не бачить | не бачить (лише `published`) | бачить, `status: "expired"` |
 | `GET /api/catalog` | не показується (каталог — лише `published`) | не показується | не показується | не показується |
 | `GET /api/catalog/{id}` (розділ 6.3) | 200, картка зі `status: "expired"` | 404 | 404 | 200 |
-| `GET /api/datasets/{id}/profile`, `/pii`, `/quality-rules`, `/quality-violations`, `/legal-basis` | 200 (метадані лишаються в БД) | 404 | 403 | 200 |
+| `GET /api/datasets/{id}/profile`, `/pii`, `/quality-rules`, `/legal-basis` | 200 — лише збережене в БД (див. нижче) | 404 | 403 | 200 |
+| `GET /api/datasets/{id}/quality-violations` | **409** `Dataset is expired` | 404 | 403 | **409** |
 | `POST /api/datasets/{id}/anonymize/preview`, `/anonymize`, `GET /publish/check`, `POST /publish` | **409** `Dataset is expired` | 404 | 403 | 403 |
 | `POST /api/datasets/{id}/legal-basis` | **409** `Dataset is expired` | 404 | 403 | **409** |
 | `POST /api/requests` (`dataset_id` expired) | — | — | 404 `Published dataset {id} not found` (як для неопублікованого) | — |
 | `GET /api/requests` | запити зі `status: "expired"` | — | свої запити зі `status: "expired"` | усі, включно з `expired` |
 | `POST /api/requests/{id}/approve`, `/reject` (запит `expired`) | **409** `Request is already resolved with status expired` | 404 | 403 | 403 |
 | `GET /api/requests/{id}/download` (запит `expired`) | 404 | 404 | **410** (автор запиту) | 404 |
+
+**Метадані `expired`-набору.** Після видалення файлів ендпоінти, що читають файл, не працюють, а ті, що читають БД, — працюють:
+
+- `/profile` і `/pii` віддають **лише збережене в БД** (`profile_json`, `pii_json` з маскованими прикладами); файл не перечитується і профіль не перераховується.
+- `/quality-rules` — правила з YAML, файл набору не потрібен, 200.
+- `/quality-violations` рахує порушення з файлу, тому для `expired` — **409** `Dataset is expired` (а не 404 «файл не знайдено» і не 200). Аудит — як для інших відмов цього ендпоінта, `result=CONFLICT`.
+- `/legal-basis` — записи реєстру з БД, 200.
 
 ### `GET /api/requests/{id}/download` для `expired`
 
@@ -236,7 +244,7 @@ Content-Type: application/json
 | Параметр | Тип | Обов'язковий | Поведінка |
 | --- | --- | --- | --- |
 | `q` | рядок, до 100 символів | ні | Пошук за назвою: підрядок без урахування регістру (`ILIKE '%q%'`), пробіли на краях обрізаються. Порожній — без фільтра. > 100 символів → 422 |
-| `data_class` | `Public` \| `Internal` \| `Confidential` \| `Personal` | ні | Точний збіг класу. Інше значення → 422 |
+| `data_class` | `Internal` \| `Confidential` \| `Personal` | ні | Точний збіг класу. Інше значення → 422 |
 
 Параметри комбінуються через AND. Сортування: `published_at` від нових до старих. Пагінації в MVP немає.
 
@@ -373,7 +381,7 @@ Content-Type: application/json
 ```ts
 export type DatasetStatus = 'uploaded' | 'published' | 'expired';
 export type ExchangeRequestStatus = 'pending' | 'approved' | 'rejected' | 'downloaded' | 'expired';
-export type DataClass = 'Public' | 'Internal' | 'Confidential' | 'Personal';
+export type DataClass = 'Internal' | 'Confidential' | 'Personal';
 export type AnonymizationMethod = 'mask' | 'generalize' | 'hmac';
 export type LegalBasisStatus = 'active' | 'revoked' | 'expired';
 
